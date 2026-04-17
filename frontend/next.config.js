@@ -1,13 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false, // Disabled for BlockNote compatibility
-  output: 'export',
+  // Static export only for production builds (consumed by Tauri).
+  // In dev mode, this would cause hydration mismatches and ChunkLoadErrors in the WebView.
+  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   images: {
     unoptimized: true,
   },
-  // Add basePath configuration
+  // basePath stays empty; assetPrefix removed because '/' produced odd asset URLs
+  // in the Tauri WebView and is unnecessary for both dev and the static export.
   basePath: '',
-  assetPrefix: '/',
 
   // Add webpack configuration for Tauri
   webpack: (config, { isServer }) => {
