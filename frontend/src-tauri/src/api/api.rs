@@ -415,6 +415,41 @@ pub async fn api_search_transcripts<R: Runtime>(
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchMatch {
+    pub transcript_id: String,
+    pub text: String,
+    pub timestamp: String,
+    pub highlight_start: usize,
+    pub highlight_end: usize,
+    pub match_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchMeetingResult {
+    pub meeting_id: String,
+    pub title: String,
+    pub score: f64,
+    pub matches: Vec<SearchMatch>,
+}
+
+#[tauri::command]
+pub async fn api_search_meetings<R: Runtime>(
+    app: AppHandle<R>,
+    query: String,
+    limit: Option<u32>,
+    auth_token: Option<String>,
+) -> Result<Vec<SearchMeetingResult>, String> {
+    log_info!("api_search_meetings called with query: '{}'", query);
+    let body = serde_json::json!({
+        "query": query,
+        "limit": limit.unwrap_or(20)
+    });
+    make_api_request::<R, Vec<SearchMeetingResult>>(
+        &app, "/search-meetings", "POST", Some(&body.to_string()), None, auth_token
+    ).await
+}
+
 #[tauri::command]
 pub async fn api_get_profile<R: Runtime>(
     app: AppHandle<R>,

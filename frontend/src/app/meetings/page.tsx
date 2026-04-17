@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search } from 'lucide-react';
+import { Search, X, Loader2 } from 'lucide-react';
+import { useSearchMeetings, SearchMeetingResult } from '@/hooks/useSearchMeetings';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
@@ -31,6 +32,9 @@ export default function MeetingsPage() {
   } | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
+  // Search
+  const { query: searchQuery, results: searchResults, isSearching, search, clearSearch } = useSearchMeetings();
+
   // Meeting cards with rich data
   const [meetingCards, setMeetingCards] = useState<MeetingCardData[]>([]);
 
@@ -55,8 +59,34 @@ export default function MeetingsPage() {
     fetchMeetingCards();
   }, [fetchMeetingCards]);
 
+  // Filter cards based on search results
+  const displayedMeetings = searchQuery.trim()
+    ? meetingCards.filter(card => searchResults.some(r => r.meeting_id === card.id))
+    : meetingCards;
+
+  // Get search snippet for a card
+  const getSearchSnippet = (meetingId: string): string | null => {
+    const result = searchResults.find(r => r.meeting_id === meetingId);
+    if (!result || !result.matches.length) return null;
+    const match = result.matches[0];
+    const start = Math.max(0, match.highlight_start - 50);
+    const end = Math.min(match.text.length, match.highlight_end + 50);
+    let snippet = match.text.slice(start, end);
+    if (start > 0) snippet = '...' + snippet;
+    if (end < match.text.length) snippet += '...';
+    return snippet;
+  };
+
   const handleCardClick = (meeting: MeetingCardData) => {
     setCurrentMeeting({ id: meeting.id, title: meeting.title });
+    if (searchQuery.trim()) {
+      const result = searchResults.find(r => r.meeting_id === meeting.id);
+      const match = result?.matches[0];
+      if (match) {
+        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}&transcript_id=${match.transcript_id}&highlight_start=${match.highlight_start}&highlight_end=${match.highlight_end}`);
+        return;
+      }
+    }
     router.push(`/meeting-details?id=${meeting.id}`);
   };
 
@@ -101,32 +131,48 @@ export default function MeetingsPage() {
           <input
             type="text"
             placeholder="Rechercher dans les meetings..."
-            disabled
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={searchQuery}
+            onChange={(e) => search(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          {isSearching && (
+            <Loader2 className="absolute right-10 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+          )}
+          {searchQuery && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="px-6 pb-6">
-        {meetingCards.length === 0 ? (
+        {displayedMeetings.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <h2 className="text-lg font-semibold text-gray-700">
-              Aucun meeting
+              {searchQuery.trim() ? 'Aucun resultat' : 'Aucun meeting'}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              Les meetings enregistres apparaitront ici.
+              {searchQuery.trim()
+                ? 'Aucun meeting ne correspond a votre recherche.'
+                : 'Les meetings enregistres apparaitront ici.'}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {meetingCards.map((meeting) => (
+            {displayedMeetings.map((meeting) => (
               <MeetingCard
                 key={meeting.id}
                 meeting={meeting}
                 onClick={() => handleCardClick(meeting)}
                 onRename={handleRenameOpen}
                 onDelete={(id) => setDeleteTarget(id)}
+                searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
+                highlightTerms={searchQuery.trim() ? searchQuery.split(/\s+/) : []}
               />
             ))}
           </div>
