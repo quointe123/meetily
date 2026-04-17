@@ -436,18 +436,43 @@ pub struct SearchMeetingResult {
 #[tauri::command]
 pub async fn api_search_meetings<R: Runtime>(
     app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
     query: String,
     limit: Option<u32>,
     auth_token: Option<String>,
 ) -> Result<Vec<SearchMeetingResult>, String> {
+    let limit_val = limit.unwrap_or(20);
     log_info!("api_search_meetings called with query: '{}'", query);
+
+    // Try the Python backend first (has fuzzy + TF-IDF + semantic search)
     let body = serde_json::json!({
         "query": query,
-        "limit": limit.unwrap_or(20)
+        "limit": limit_val
     });
-    make_api_request::<R, Vec<SearchMeetingResult>>(
+    match make_api_request::<R, Vec<SearchMeetingResult>>(
         &app, "/search-meetings", "POST", Some(&body.to_string()), None, auth_token
-    ).await
+    ).await {
+        Ok(results) => {
+            log_info!("Backend search returned {} results", results.len());
+            return Ok(results);
+        }
+        Err(e) => {
+            log_warn!("Backend search unavailable, falling back to local search: {}", e);
+        }
+    }
+
+    // Fallback: local SQLite LIKE search
+    let pool = state.db_manager.pool();
+    match TranscriptsRepository::search_meetings(pool, &query, limit_val).await {
+        Ok(results) => {
+            log_info!("Local search returned {} results", results.len());
+            Ok(results)
+        }
+        Err(e) => {
+            log_error!("Local search also failed: {}", e);
+            Err(format!("Search failed: {}", e))
+        }
+    }
 }
 
 #[tauri::command]
