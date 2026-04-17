@@ -688,19 +688,6 @@ async def search_meetings(request: SearchMeetingsRequest):
         logger.error(f"Error in hybrid search: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class SearchRequest(BaseModel):
-    query: str
-
-@app.post("/search-transcripts")
-async def search_transcripts(request: SearchRequest):
-    """Search through meeting transcripts for the given query"""
-    try:
-        results = await db.search_transcripts(request.query)
-        return JSONResponse(content=results)
-    except Exception as e:
-        logger.error(f"Error searching transcripts: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on API shutdown"""
