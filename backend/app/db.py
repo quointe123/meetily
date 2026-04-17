@@ -783,6 +783,93 @@ class DatabaseManager:
             row = await cursor.fetchone()
             return row[0] if row and row[0] else ""
 
+    async def index_transcript_embeddings(self, meeting_id: str):
+        """Compute and store embeddings for a meeting's transcripts via Ollama."""
+        import httpx
+        import numpy as np
+
+        try:
+            # Check if Ollama is available
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                try:
+                    resp = await client.get("http://localhost:11434/api/tags")
+                    if resp.status_code != 200:
+                        logger.info("Ollama not available, skipping embedding indexation")
+                        return
+                    # Check nomic-embed-text is available
+                    models = resp.json().get("models", [])
+                    if not any(m.get("name", "").startswith("nomic-embed-text") for m in models):
+                        logger.info("nomic-embed-text model not found, skipping embedding indexation")
+                        return
+                except Exception:
+                    logger.info("Ollama not available, skipping embedding indexation")
+                    return
+
+            async with self._get_connection() as conn:
+                # Get all transcripts for the meeting
+                cursor = await conn.execute(
+                    "SELECT id, transcript FROM transcripts WHERE meeting_id = ?",
+                    (meeting_id,)
+                )
+                rows = await cursor.fetchall()
+
+                if not rows:
+                    return
+
+                # Delete existing embeddings for this meeting
+                await conn.execute(
+                    "DELETE FROM transcript_embeddings WHERE meeting_id = ?",
+                    (meeting_id,)
+                )
+
+                # Chunk and embed each transcript
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    for transcript_id, text in rows:
+                        chunks = self._chunk_text(text, chunk_size=800, overlap=200)
+
+                        for chunk in chunks:
+                            if not chunk.strip():
+                                continue
+
+                            try:
+                                resp = await client.post(
+                                    "http://localhost:11434/api/embed",
+                                    json={"model": "nomic-embed-text", "input": chunk},
+                                )
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    embeddings = data.get("embeddings", [])
+                                    if embeddings:
+                                        embedding_bytes = np.array(embeddings[0], dtype=np.float32).tobytes()
+                                        await conn.execute(
+                                            "INSERT INTO transcript_embeddings (meeting_id, transcript_id, chunk_text, embedding) VALUES (?, ?, ?, ?)",
+                                            (meeting_id, transcript_id, chunk, embedding_bytes),
+                                        )
+                            except Exception as e:
+                                logger.warning(f"Failed to embed chunk for transcript {transcript_id}: {e}")
+                                continue
+
+                await conn.commit()
+                logger.info(f"Indexed embeddings for meeting {meeting_id}")
+
+        except Exception as e:
+            logger.error(f"Error indexing embeddings for meeting {meeting_id}: {e}")
+
+    @staticmethod
+    def _chunk_text(text: str, chunk_size: int = 800, overlap: int = 200) -> list:
+        """Split text into overlapping chunks."""
+        if len(text) <= chunk_size:
+            return [text]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            chunks.append(text[start:end])
+            start += chunk_size - overlap
+
+        return chunks
+
     async def search_transcripts(self, query: str):
         """Search through meeting transcripts for the given query"""
         if not query or query.strip() == "":

@@ -513,7 +513,7 @@ async def get_summary(meeting_id: str):
         )
 
 @app.post("/save-transcript")
-async def save_transcript(request: SaveTranscriptRequest):
+async def save_transcript(request: SaveTranscriptRequest, background_tasks: BackgroundTasks):
     """Save transcript segments for a meeting without processing"""
     try:
         logger.info(f"Received save-transcript request for meeting: {request.meeting_title}")
@@ -544,6 +544,9 @@ async def save_transcript(request: SaveTranscriptRequest):
                 audio_end_time=transcript.audio_end_time,
                 duration=transcript.duration
             )
+
+        # Index embeddings in background (gracefully skipped if Ollama unavailable)
+        background_tasks.add_task(db.index_transcript_embeddings, meeting_id)
 
         logger.info("Transcripts saved successfully")
         return {"status": "success", "message": "Transcript saved successfully", "meeting_id": meeting_id}
