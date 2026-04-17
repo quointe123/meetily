@@ -445,19 +445,40 @@ pub async fn api_search_meetings<R: Runtime>(
     log_info!("api_search_meetings called with query: '{}'", query);
 
     // Try the Python backend first (has fuzzy + TF-IDF + semantic search)
+    // Use a short timeout (1s) to avoid blocking the UI if backend is down
     let body = serde_json::json!({
         "query": query,
         "limit": limit_val
     });
-    match make_api_request::<R, Vec<SearchMeetingResult>>(
-        &app, "/search-meetings", "POST", Some(&body.to_string()), None, auth_token
-    ).await {
-        Ok(results) => {
-            log_info!("Backend search returned {} results", results.len());
-            return Ok(results);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(1))
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+    let server_url = format!("{}/search-meetings", APP_SERVER_URL);
+    match client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            match response.json::<Vec<SearchMeetingResult>>().await {
+                Ok(results) => {
+                    log_info!("Backend search returned {} results", results.len());
+                    return Ok(results);
+                }
+                Err(e) => {
+                    log_warn!("Backend search response parse error: {}", e);
+                }
+            }
+        }
+        Ok(response) => {
+            log_warn!("Backend search returned status: {}", response.status());
         }
         Err(e) => {
-            log_warn!("Backend search unavailable, falling back to local search: {}", e);
+            log_warn!("Backend search unavailable, falling back to local: {}", e);
         }
     }
 

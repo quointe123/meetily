@@ -102,6 +102,7 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          searchTerm={searchTerm}
         />
       </div>
 
