@@ -135,6 +135,114 @@ pub fn extract_meeting_name_from_markdown(markdown: &str) -> Option<String> {
         .map(|line| line.trim_start_matches("# ").trim().to_string())
 }
 
+/// Maps an ISO 639-1 language code to its full English name.
+/// Returns None for "auto", "auto-translate", or empty strings (no language instruction needed).
+fn language_code_to_name(code: &str) -> Option<&'static str> {
+    match code {
+        "" | "auto" | "auto-translate" => None,
+        "en" => Some("English"),
+        "zh" => Some("Chinese"),
+        "de" => Some("German"),
+        "es" => Some("Spanish"),
+        "ru" => Some("Russian"),
+        "ko" => Some("Korean"),
+        "fr" => Some("French"),
+        "ja" => Some("Japanese"),
+        "pt" => Some("Portuguese"),
+        "tr" => Some("Turkish"),
+        "pl" => Some("Polish"),
+        "ca" => Some("Catalan"),
+        "nl" => Some("Dutch"),
+        "ar" => Some("Arabic"),
+        "sv" => Some("Swedish"),
+        "it" => Some("Italian"),
+        "id" => Some("Indonesian"),
+        "hi" => Some("Hindi"),
+        "fi" => Some("Finnish"),
+        "vi" => Some("Vietnamese"),
+        "he" => Some("Hebrew"),
+        "uk" => Some("Ukrainian"),
+        "el" => Some("Greek"),
+        "ms" => Some("Malay"),
+        "cs" => Some("Czech"),
+        "ro" => Some("Romanian"),
+        "da" => Some("Danish"),
+        "hu" => Some("Hungarian"),
+        "ta" => Some("Tamil"),
+        "no" => Some("Norwegian"),
+        "th" => Some("Thai"),
+        "ur" => Some("Urdu"),
+        "hr" => Some("Croatian"),
+        "bg" => Some("Bulgarian"),
+        "lt" => Some("Lithuanian"),
+        "la" => Some("Latin"),
+        "mi" => Some("Maori"),
+        "ml" => Some("Malayalam"),
+        "cy" => Some("Welsh"),
+        "sk" => Some("Slovak"),
+        "te" => Some("Telugu"),
+        "fa" => Some("Persian"),
+        "lv" => Some("Latvian"),
+        "bn" => Some("Bengali"),
+        "sr" => Some("Serbian"),
+        "az" => Some("Azerbaijani"),
+        "sl" => Some("Slovenian"),
+        "kn" => Some("Kannada"),
+        "et" => Some("Estonian"),
+        "mk" => Some("Macedonian"),
+        "br" => Some("Breton"),
+        "eu" => Some("Basque"),
+        "is" => Some("Icelandic"),
+        "hy" => Some("Armenian"),
+        "ne" => Some("Nepali"),
+        "mn" => Some("Mongolian"),
+        "bs" => Some("Bosnian"),
+        "kk" => Some("Kazakh"),
+        "sq" => Some("Albanian"),
+        "sw" => Some("Swahili"),
+        "gl" => Some("Galician"),
+        "mr" => Some("Marathi"),
+        "pa" => Some("Punjabi"),
+        "si" => Some("Sinhala"),
+        "km" => Some("Khmer"),
+        "sn" => Some("Shona"),
+        "yo" => Some("Yoruba"),
+        "so" => Some("Somali"),
+        "af" => Some("Afrikaans"),
+        "oc" => Some("Occitan"),
+        "ka" => Some("Georgian"),
+        "be" => Some("Belarusian"),
+        "tg" => Some("Tajik"),
+        "sd" => Some("Sindhi"),
+        "gu" => Some("Gujarati"),
+        "am" => Some("Amharic"),
+        "yi" => Some("Yiddish"),
+        "lo" => Some("Lao"),
+        "uz" => Some("Uzbek"),
+        "fo" => Some("Faroese"),
+        "ht" => Some("Haitian Creole"),
+        "ps" => Some("Pashto"),
+        "tk" => Some("Turkmen"),
+        "nn" => Some("Nynorsk"),
+        "mt" => Some("Maltese"),
+        "sa" => Some("Sanskrit"),
+        "lb" => Some("Luxembourgish"),
+        "my" => Some("Myanmar"),
+        "bo" => Some("Tibetan"),
+        "tl" => Some("Tagalog"),
+        "mg" => Some("Malagasy"),
+        "as" => Some("Assamese"),
+        "tt" => Some("Tatar"),
+        "haw" => Some("Hawaiian"),
+        "ln" => Some("Lingala"),
+        "ha" => Some("Hausa"),
+        "ba" => Some("Bashkir"),
+        "jw" => Some("Javanese"),
+        "su" => Some("Sundanese"),
+        _ => None,
+    }
+}
+
 /// Generates a complete meeting summary with conditional chunking strategy
 ///
 /// # Arguments
@@ -145,6 +253,7 @@ pub fn extract_meeting_name_from_markdown(markdown: &str) -> Option<String> {
 /// * `text` - Full transcript text to summarize
 /// * `custom_prompt` - Optional user-provided context
 /// * `template_id` - Template identifier (e.g., "daily_standup", "standard_meeting")
+/// * `language` - ISO 639-1 language code for the output report (e.g., "fr", "de", "auto")
 /// * `token_threshold` - Token limit for single-pass processing (default 4000)
 /// * `ollama_endpoint` - Optional custom Ollama endpoint
 /// * `custom_openai_endpoint` - Optional custom OpenAI-compatible endpoint
@@ -164,6 +273,7 @@ pub async fn generate_meeting_summary(
     text: &str,
     custom_prompt: &str,
     template_id: &str,
+    language: &str,
     token_threshold: usize,
     ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
@@ -313,6 +423,14 @@ pub async fn generate_meeting_summary(
     let clean_template_markdown = template.to_markdown_structure();
     let section_instructions = template.to_section_instructions();
 
+    // Build language instruction
+    let language_instruction = language_code_to_name(language)
+        .map(|name| format!(
+            "\n7. You MUST write the entire report in {}. All section titles, content, and analysis must be in {}.",
+            name, name
+        ))
+        .unwrap_or_default();
+
     let final_system_prompt = format!(
         r#"You are an expert meeting summarizer. Generate a final meeting report by filling in the provided Markdown template based on the source text.
 
@@ -322,7 +440,7 @@ pub async fn generate_meeting_summary(
 3. Fill each template section per its instructions.
 4. If a section has no relevant info, write "None noted in this section."
 5. Output **only** the completed Markdown report.
-6. If unsure about something, omit it.
+6. If unsure about something, omit it.{}
 
 **SECTION-SPECIFIC INSTRUCTIONS:**
 {}
@@ -331,7 +449,7 @@ pub async fn generate_meeting_summary(
 {}
 </template>
 "#,
-        section_instructions, clean_template_markdown
+        language_instruction, section_instructions, clean_template_markdown
     );
 
     let mut final_user_prompt = format!(

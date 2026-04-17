@@ -1,0 +1,49 @@
+{
+  "name": "Audit Report (Detailed Analysis)",
+  "description": "Exhaustive analytical report for long meetings. Produces a multi-page document with executive summary, decision rationale, risk analysis, and recommendations.",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "instruction": "Write a concise but complete synthesis of the meeting's key outcomes, decisions, and next steps. This should stand alone as a one-paragraph overview that a senior stakeholder can read without needing the full report.",
+      "format": "paragraph"
+    },
+    {
+      "title": "Meeting Context",
+      "instruction": "List the meeting date, duration, participants (with roles if identifiable), and the stated objective or agenda of the meeting.",
+      "format": "list"
+    },
+    {
+      "title": "Key Decisions & Rationale",
+      "instruction": "For each decision made during the meeting, document: what was decided, who proposed it, the reasoning behind it, and any conditions or caveats. Include the approximate timestamp from the transcript.",
+      "format": "list",
+      "item_format": "| **Decision** | **Proposed By** | **Rationale** | **Conditions/Caveats** | **Timestamp** |\n| --- | --- | --- | --- | --- |"
+    },
+    {
+      "title": "Points of Divergence",
+      "instruction": "Identify all disagreements or differing opinions expressed during the meeting. For each, document: the topic, the positions held by different participants, whether a resolution was reached, and if so what it was. If no resolution was reached, state that explicitly.",
+      "format": "list"
+    },
+    {
+      "title": "Risk Analysis",
+      "instruction": "List all risks mentioned explicitly or implied during the discussion. For each risk, assess: severity (High/Medium/Low), likelihood if discernible, potential impact, and any mitigation actions proposed. Include risks that participants may not have explicitly labeled as risks but that emerge from the discussion.",
+      "format": "list",
+      "item_format": "| **Risk** | **Severity** | **Impact** | **Mitigation Proposed** | **Owner** |\n| --- | --- | --- | --- | --- |"
+    },
+    {
+      "title": "Recommendations",
+      "instruction": "List all recommended actions in order of priority. For each, include: the action, the responsible person (if mentioned), the deadline (if mentioned), and a brief justification drawn from the discussion.",
+      "format": "list",
+      "item_format": "| **Priority** | **Action** | **Owner** | **Deadline** | **Justification** |\n| --- | --- | --- | --- | --- |"
+    },
+    {
+      "title": "Detailed Discussion Log",
+      "instruction": "Provide a chronological summary of all topics discussed. For each topic, include: the subject, key points raised by participants with direct quotes where impactful, and the outcome or conclusion. Use timestamps from the transcript to anchor the chronology. Be thorough — this section should capture everything substantive that was said.",
+      "format": "list"
+    },
+    {
+      "title": "Appendices",
+      "instruction": "List all specific numbers, statistics, documents, tools, URLs, or external references mentioned during the meeting. Include the context in which they were mentioned.",
+      "format": "list"
+    }
+  ]
+}

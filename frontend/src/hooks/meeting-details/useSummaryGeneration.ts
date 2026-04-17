@@ -4,7 +4,6 @@ import { ModelConfig } from '@/components/ModelSettingsModal';
 import { CurrentMeeting, useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { invoke as invokeTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import Analytics from '@/lib/analytics';
 import { isOllamaNotInstalledError } from '@/lib/utils';
 import { BuiltInModelInfo } from '@/lib/builtin-ai';
 
@@ -16,6 +15,7 @@ interface UseSummaryGenerationProps {
   modelConfig: ModelConfig;
   isModelConfigLoading: boolean;
   selectedTemplate: string;
+  selectedLanguage: string;
   onMeetingUpdated?: () => Promise<void>;
   updateMeetingTitle: (title: string) => void;
   setAiSummary: (summary: Summary | null) => void;
@@ -28,6 +28,7 @@ export function useSummaryGeneration({
   modelConfig,
   isModelConfigLoading,
   selectedTemplate,
+  selectedLanguage,
   onMeetingUpdated,
   updateMeetingTitle,
   setAiSummary,
@@ -81,22 +82,6 @@ export function useSummaryGeneration({
 
       console.log('Processing transcript with template:', selectedTemplate);
 
-      // Calculate time since recording
-      const timeSinceRecording = (Date.now() - new Date(meeting.created_at).getTime()) / 60000; // minutes
-
-      // Track summary generation started
-      await Analytics.trackSummaryGenerationStarted(
-        modelConfig.provider,
-        modelConfig.model,
-        transcriptText.length,
-        timeSinceRecording
-      );
-
-      // Track custom prompt usage if present
-      if (customPrompt.trim().length > 0) {
-        await Analytics.trackCustomPromptUsed(customPrompt.trim().length);
-      }
-
       // Show toast notification for generation start
       toast.info(`${isRegeneration ? 'Regenerating' : 'Generating'} summary...`, {
         description: `Using ${modelConfig.provider}/${modelConfig.model}`,
@@ -113,6 +98,7 @@ export function useSummaryGeneration({
         overlap: 1000,
         customPrompt: customPrompt,
         templateId: selectedTemplate,
+        language: selectedLanguage,
       }) as any;
 
       const process_id = result.process_id;
@@ -170,14 +156,6 @@ export function useSummaryGeneration({
                 toast.error(`Failed to regenerate summary`, {
                   description: `${errorMessage}. Your previous summary has been restored.`,
                 });
-
-                await Analytics.trackSummaryGenerationCompleted(
-                  modelConfig.provider,
-                  modelConfig.model,
-                  false,
-                  undefined,
-                  errorMessage
-                );
                 return;
               }
             } catch (error) {
@@ -206,14 +184,6 @@ export function useSummaryGeneration({
             console.log('🔧 Model required error detected, opening model settings...');
             onOpenModelSettings();
           }
-
-          await Analytics.trackSummaryGenerationCompleted(
-            modelConfig.provider,
-            modelConfig.model,
-            false,
-            undefined,
-            errorMessage
-          );
           return;
         }
 
@@ -242,12 +212,6 @@ export function useSummaryGeneration({
             if (meetingName && onMeetingUpdated) {
               await onMeetingUpdated();
             }
-
-            await Analytics.trackSummaryGenerationCompleted(
-              modelConfig.provider,
-              modelConfig.model,
-              true
-            );
             return;
           }
 
@@ -259,14 +223,6 @@ export function useSummaryGeneration({
             console.error('Summary completed but all sections empty');
             setSummaryError('Summary generation completed but returned empty content.');
             setSummaryStatus('error');
-
-            await Analytics.trackSummaryGenerationCompleted(
-              modelConfig.provider,
-              modelConfig.model,
-              false,
-              undefined,
-              'Empty summary generated'
-            );
             return;
           }
 
@@ -313,12 +269,6 @@ export function useSummaryGeneration({
             duration: 4000,
           });
 
-          await Analytics.trackSummaryGenerationCompleted(
-            modelConfig.provider,
-            modelConfig.model,
-            true
-          );
-
           if (meetingName && onMeetingUpdated) {
             await onMeetingUpdated();
           }
@@ -334,20 +284,13 @@ export function useSummaryGeneration({
       toast.error(`Failed to ${isRegeneration ? 'regenerate' : 'generate'} summary`, {
         description: errorMessage,
       });
-
-      await Analytics.trackSummaryGenerationCompleted(
-        modelConfig.provider,
-        modelConfig.model,
-        false,
-        undefined,
-        errorMessage
-      );
     }
   }, [
     meeting.id,
     meeting.created_at,
     modelConfig,
     selectedTemplate,
+    selectedLanguage,
     startSummaryPolling,
     setAiSummary,
     updateMeetingTitle,
@@ -562,7 +505,7 @@ export function useSummaryGeneration({
       .join('\n');
 
     await processSummary({ transcriptText: fullTranscript, customPrompt });
-  }, [meeting.id, fetchAllTranscripts, processSummary, modelConfig, isModelConfigLoading, selectedTemplate]);
+  }, [meeting.id, fetchAllTranscripts, processSummary, modelConfig, isModelConfigLoading, selectedTemplate, selectedLanguage]);
 
   // Public API: Regenerate summary from original transcript
   const handleRegenerateSummary = useCallback(async () => {

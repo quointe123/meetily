@@ -81,6 +81,7 @@ impl SummaryService {
         model_name: String,
         custom_prompt: String,
         template_id: String,
+        language: String,
     ) {
         let start_time = Instant::now();
         info!(
@@ -229,6 +230,7 @@ impl SummaryService {
             &text,
             &custom_prompt,
             &template_id,
+            &language,
             token_threshold,
             ollama_endpoint.as_deref(),
             custom_openai_endpoint.as_deref(),
