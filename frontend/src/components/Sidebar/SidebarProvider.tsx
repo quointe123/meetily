@@ -1,46 +1,21 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import Analytics from '@/lib/analytics';
+import { usePathname } from 'next/navigation';
 import { invoke } from '@tauri-apps/api/core';
-import { useRecordingState } from '@/contexts/RecordingStateContext';
-
-
-interface SidebarItem {
-  id: string;
-  title: string;
-  type: 'folder' | 'file';
-  children?: SidebarItem[];
-}
 
 export interface CurrentMeeting {
   id: string;
   title: string;
 }
 
-// Search result type for transcript search
-interface TranscriptSearchResult {
-  id: string;
-  title: string;
-  matchContext: string;
-  timestamp: string;
-};
-
 interface SidebarContextType {
   currentMeeting: CurrentMeeting | null;
   setCurrentMeeting: (meeting: CurrentMeeting | null) => void;
-  sidebarItems: SidebarItem[];
-  isCollapsed: boolean;
-  toggleCollapse: () => void;
   meetings: CurrentMeeting[];
   setMeetings: (meetings: CurrentMeeting[]) => void;
   isMeetingActive: boolean;
   setIsMeetingActive: (active: boolean) => void;
-  handleRecordingToggle: () => void;
-  searchTranscripts: (query: string) => Promise<void>;
-  searchResults: TranscriptSearchResult[];
-  isSearching: boolean;
   setServerAddress: (address: string) => void;
   serverAddress: string;
   transcriptServerAddress: string;
@@ -51,7 +26,9 @@ interface SidebarContextType {
   stopSummaryPolling: (meetingId: string) => void;
   // Refetch meetings from backend
   refetchMeetings: () => Promise<void>;
-
+  // Meeting CRUD operations
+  deleteMeeting: (meetingId: string) => Promise<void>;
+  renameMeeting: (meetingId: string, newTitle: string) => Promise<void>;
 }
 
 const SidebarContext = createContext<SidebarContextType | null>(null);
@@ -66,21 +43,13 @@ export const useSidebar = () => {
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [currentMeeting, setCurrentMeeting] = useState<CurrentMeeting | null>({ id: 'intro-call', title: '+ New Call' });
-  const [isCollapsed, setIsCollapsed] = useState(true);
   const [meetings, setMeetings] = useState<CurrentMeeting[]>([]);
-  const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>([]);
   const [isMeetingActive, setIsMeetingActive] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [serverAddress, setServerAddress] = useState('');
   const [transcriptServerAddress, setTranscriptServerAddress] = useState('');
   const [activeSummaryPolls, setActiveSummaryPolls] = useState<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Use recording state from RecordingStateContext (single source of truth)
-  const { isRecording } = useRecordingState();
-
   const pathname = usePathname();
-  const router = useRouter();
 
   // Extract fetchMeetings as a reusable function
   const fetchMeetings = React.useCallback(async () => {
@@ -92,11 +61,9 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
           title: meeting.title
         }));
         setMeetings(transformedMeetings);
-        Analytics.trackBackendConnection(true);
       } catch (error) {
         console.error('Error fetching meetings:', error);
         setMeetings([]);
-        Analytics.trackBackendConnection(false, error instanceof Error ? error.message : 'Unknown error');
       }
     }
   }, [serverAddress]);
@@ -113,76 +80,42 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     fetchSettings();
   }, []);
 
-  const baseItems: SidebarItem[] = [
-    {
-      id: 'meetings',
-      title: 'Meeting Notes',
-      type: 'folder' as const,
-      children: [
-        ...meetings.map(meeting => ({ id: meeting.id, title: meeting.title, type: 'file' as const }))
-      ]
-    },
-  ];
-
-
-  const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
-  };
-
   // Update current meeting when on home page
   useEffect(() => {
     if (pathname === '/') {
       setCurrentMeeting({ id: 'intro-call', title: '+ New Call' });
     }
-    setSidebarItems(baseItems);
   }, [pathname]);
 
-  // Update sidebar items when meetings change
-  useEffect(() => {
-    setSidebarItems(baseItems);
-  }, [meetings]);
-
-  // Function to handle recording toggle from sidebar
-  const handleRecordingToggle = () => {
-    if (!isRecording) {
-      // Check if already on home page
-      if (pathname === '/') {
-        // Already on home - trigger recording directly via custom event
-        console.log('Triggering recording from sidebar (already on home page)');
-        window.dispatchEvent(new CustomEvent('start-recording-from-sidebar'));
-      } else {
-        // Not on home - navigate and use auto-start mechanism
-        console.log('Navigating to home page with auto-start flag');
-        sessionStorage.setItem('autoStartRecording', 'true');
-        router.push('/');
-      }
-
-      // Track recording initiation from sidebar
-      Analytics.trackButtonClick('start_recording', 'sidebar');
-    }
-    // The actual recording start/stop is handled in the Home component
-  };
-
-  // Function to search through meeting transcripts
-  const searchTranscripts = async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
+  // Delete a meeting
+  const deleteMeeting = React.useCallback(async (meetingId: string) => {
     try {
-      setIsSearching(true);
-
-
-      const results = await invoke('api_search_transcripts', { query }) as TranscriptSearchResult[];
-      setSearchResults(results);
+      await invoke('api_delete_meeting', { meetingId });
+      setMeetings(prev => prev.filter(m => m.id !== meetingId));
+      if (currentMeeting?.id === meetingId) {
+        setCurrentMeeting(null);
+      }
     } catch (error) {
-      console.error('Error searching transcripts:', error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
+      console.error('Error deleting meeting:', error);
+      throw error;
     }
-  };
+  }, [currentMeeting]);
+
+  // Rename a meeting
+  const renameMeeting = React.useCallback(async (meetingId: string, newTitle: string) => {
+    try {
+      await invoke('api_save_meeting_title', { meetingId, title: newTitle });
+      setMeetings(prev => prev.map(m =>
+        m.id === meetingId ? { ...m, title: newTitle } : m
+      ));
+      if (currentMeeting?.id === meetingId) {
+        setCurrentMeeting({ id: meetingId, title: newTitle });
+      }
+    } catch (error) {
+      console.error('Error renaming meeting:', error);
+      throw error;
+    }
+  }, [currentMeeting]);
 
   // Summary polling management
   const startSummaryPolling = React.useCallback((
@@ -287,23 +220,14 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeSummaryPolls]);
 
-
-
   return (
     <SidebarContext.Provider value={{
       currentMeeting,
       setCurrentMeeting,
-      sidebarItems,
-      isCollapsed,
-      toggleCollapse,
       meetings,
       setMeetings,
       isMeetingActive,
       setIsMeetingActive,
-      handleRecordingToggle,
-      searchTranscripts,
-      searchResults,
-      isSearching,
       setServerAddress,
       serverAddress,
       transcriptServerAddress,
@@ -312,7 +236,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
       startSummaryPolling,
       stopSummaryPolling,
       refetchMeetings: fetchMeetings,
-
+      deleteMeeting,
+      renameMeeting,
     }}>
       {children}
     </SidebarContext.Provider>
