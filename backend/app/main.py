@@ -7,6 +7,7 @@ from typing import Optional, List
 import logging
 from dotenv import load_dotenv
 from db import DatabaseManager
+from search import HybridSearchOrchestrator
 import json
 from threading import Lock
 from transcript_processor import TranscriptProcessor
@@ -52,6 +53,9 @@ app.add_middleware(
 
 # Global database manager instance for meeting management endpoints
 db = DatabaseManager()
+
+# Global hybrid search orchestrator
+search_orchestrator = HybridSearchOrchestrator()
 
 # New Pydantic models for meeting management
 class Transcript(BaseModel):
@@ -615,6 +619,70 @@ async def save_meeting_summary(data: MeetingSummaryUpdate):
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
         logger.error(f"Error saving meeting summary: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/get-meetings-cards")
+async def get_meetings_cards():
+    """Get all meetings with card display data (duration, summary preview)"""
+    try:
+        results = await db.get_meetings_with_details()
+        return JSONResponse(content=results)
+    except Exception as e:
+        logger.error(f"Error getting meetings cards: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SearchMeetingsRequest(BaseModel):
+    query: str
+    limit: int = 20
+
+@app.post("/search-meetings")
+async def search_meetings(request: SearchMeetingsRequest):
+    """Hybrid search across meeting transcripts (fuzzy + TF-IDF + semantic)"""
+    try:
+        async with db._get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT t.id, t.meeting_id, m.title, t.transcript, t.timestamp
+                FROM transcripts t
+                JOIN meetings m ON m.id = t.meeting_id
+            """)
+            rows = await cursor.fetchall()
+
+            transcripts = [
+                {
+                    "transcript_id": row[0],
+                    "meeting_id": row[1],
+                    "title": row[2],
+                    "text": row[3],
+                    "timestamp": row[4],
+                }
+                for row in rows
+            ]
+
+            emb_cursor = await conn.execute("""
+                SELECT meeting_id, transcript_id, chunk_text, embedding
+                FROM transcript_embeddings
+            """)
+            emb_rows = await emb_cursor.fetchall()
+
+            stored_embeddings = [
+                {
+                    "meeting_id": row[0],
+                    "transcript_id": row[1],
+                    "chunk_text": row[2],
+                    "embedding": row[3],
+                }
+                for row in emb_rows
+            ]
+
+        results = await search_orchestrator.search(
+            query=request.query,
+            transcripts=transcripts,
+            stored_embeddings=stored_embeddings,
+            limit=request.limit,
+        )
+        return JSONResponse(content=results)
+    except Exception as e:
+        logger.error(f"Error in hybrid search: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class SearchRequest(BaseModel):

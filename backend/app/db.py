@@ -128,6 +128,23 @@ class DatabaseManager:
                 )
             """)
 
+            # Create transcript_embeddings table for semantic search
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS transcript_embeddings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meeting_id TEXT NOT NULL,
+                    transcript_id TEXT NOT NULL,
+                    chunk_text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_transcript_embeddings_meeting
+                ON transcript_embeddings(meeting_id)
+            """)
+
             # Create settings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
@@ -859,7 +876,52 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error searching transcripts: {str(e)}")
             raise
-        
+
+    async def get_meetings_with_details(self):
+        """Get all meetings with created_at, duration, and summary preview for card display"""
+        try:
+            async with self._get_connection() as conn:
+                cursor = await conn.execute("""
+                    SELECT
+                        m.id,
+                        m.title,
+                        m.created_at,
+                        (SELECT MAX(COALESCE(t.audio_end_time, 0)) FROM transcripts t WHERE t.meeting_id = m.id) as duration_seconds,
+                        (SELECT sp.result FROM summary_processes sp WHERE sp.meeting_id = m.id AND sp.status = 'completed' LIMIT 1) as summary_result
+                    FROM meetings m
+                    ORDER BY m.created_at DESC
+                """)
+                rows = await cursor.fetchall()
+
+                results = []
+                for row in rows:
+                    meeting_id, title, created_at, duration_seconds, summary_result = row
+
+                    summary_preview = None
+                    if summary_result:
+                        try:
+                            summary_data = json.loads(summary_result) if isinstance(summary_result, str) else summary_result
+                            if isinstance(summary_data, dict):
+                                md = summary_data.get('markdown', '')
+                                if md:
+                                    lines = [l.strip() for l in md.split('\n') if l.strip() and not l.strip().startswith('#')]
+                                    summary_preview = ' '.join(lines)[:150]
+                        except (json.JSONDecodeError, AttributeError):
+                            pass
+
+                    results.append({
+                        'id': meeting_id,
+                        'title': title,
+                        'created_at': created_at or '',
+                        'duration_seconds': duration_seconds,
+                        'summary_preview': summary_preview,
+                    })
+
+                return results
+        except Exception as e:
+            logger.error(f"Error getting meetings with details: {str(e)}")
+            raise
+
     async def delete_api_key(self, provider: str):
         """Delete the API key"""
         provider_list = ["openai", "claude", "groq", "ollama"]

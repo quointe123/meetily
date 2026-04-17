@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { invoke } from '@tauri-apps/api/core';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { MeetingCard, MeetingCardData } from '@/components/MeetingCard';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
@@ -30,14 +31,29 @@ export default function MeetingsPage() {
   } | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Build card data from the basic meetings list
-  const cardData: MeetingCardData[] = meetings.map((m) => ({
-    id: m.id,
-    title: m.title,
-    created_at: '',
-    duration_seconds: null,
-    summary_preview: null,
-  }));
+  // Meeting cards with rich data
+  const [meetingCards, setMeetingCards] = useState<MeetingCardData[]>([]);
+
+  const fetchMeetingCards = useCallback(async () => {
+    try {
+      const cards = await invoke('api_get_meetings_cards') as MeetingCardData[];
+      setMeetingCards(cards);
+    } catch (error) {
+      console.error('Error fetching meeting cards:', error);
+      // Fallback to basic meetings list
+      setMeetingCards(meetings.map(m => ({
+        id: m.id,
+        title: m.title,
+        created_at: '',
+        duration_seconds: null,
+        summary_preview: null,
+      })));
+    }
+  }, [meetings]);
+
+  useEffect(() => {
+    fetchMeetingCards();
+  }, [fetchMeetingCards]);
 
   const handleCardClick = (meeting: MeetingCardData) => {
     setCurrentMeeting({ id: meeting.id, title: meeting.title });
@@ -93,7 +109,7 @@ export default function MeetingsPage() {
 
       {/* Content */}
       <div className="px-6 pb-6">
-        {cardData.length === 0 ? (
+        {meetingCards.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <h2 className="text-lg font-semibold text-gray-700">
               Aucun meeting
@@ -104,7 +120,7 @@ export default function MeetingsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {cardData.map((meeting) => (
+            {meetingCards.map((meeting) => (
               <MeetingCard
                 key={meeting.id}
                 meeting={meeting}

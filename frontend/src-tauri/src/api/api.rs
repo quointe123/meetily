@@ -352,6 +352,39 @@ pub async fn api_get_meetings<R: Runtime>(
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MeetingCardData {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub duration_seconds: Option<f64>,
+    pub summary_preview: Option<String>,
+}
+
+#[tauri::command]
+pub async fn api_get_meetings_cards<R: Runtime>(
+    _app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    auth_token: Option<String>,
+) -> Result<Vec<MeetingCardData>, String> {
+    log_info!(
+        "api_get_meetings_cards called with auth_token: {}",
+        auth_token.is_some()
+    );
+    let pool = state.db_manager.pool();
+
+    match MeetingsRepository::get_meetings_with_details(pool).await {
+        Ok(cards) => {
+            log_info!("Successfully got {} meeting cards", cards.len());
+            Ok(cards)
+        }
+        Err(e) => {
+            log_error!("Error getting meeting cards: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn api_search_transcripts<R: Runtime>(
     _app: AppHandle<R>,
