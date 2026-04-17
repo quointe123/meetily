@@ -37,6 +37,10 @@ export interface VirtualizedTranscriptViewProps {
 
     /** Search term to highlight in transcript text */
     searchTerm?: string | null;
+    /** Index of the active match (for prev/next navigation) */
+    activeMatchIndex?: number;
+    /** All search matches with segment indices */
+    searchMatches?: { index: number; start: number; end: number }[];
 }
 
 // Threshold for enabling virtualization (below this, use simple rendering)
@@ -145,6 +149,8 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
     loadedCount = 0,
     onLoadMore,
     searchTerm,
+    activeMatchIndex = 0,
+    searchMatches = [],
 }) => {
     // Create scroll ref first - shared between virtualizer and auto-scroll hook
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -166,6 +172,34 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
             });
         },
     });
+
+    // Scroll to the active search match (initial load + prev/next navigation)
+    const prevMatchIndex = useRef<number>(-1);
+    useEffect(() => {
+        if (!searchTerm || segments.length === 0 || searchMatches.length === 0) return;
+
+        const match = searchMatches[activeMatchIndex];
+        if (!match) return;
+
+        // Skip if we already scrolled to this match
+        if (prevMatchIndex.current === activeMatchIndex && prevMatchIndex.current !== -1) return;
+        prevMatchIndex.current = activeMatchIndex;
+
+        const segmentIndex = match.index;
+
+        // Small delay to let virtualizer measure on initial load
+        const delay = prevMatchIndex.current <= 0 ? 300 : 50;
+        const timer = setTimeout(() => {
+            if (segments.length >= VIRTUALIZATION_THRESHOLD) {
+                virtualizer.scrollToIndex(segmentIndex, { align: 'center', behavior: 'smooth' });
+            } else {
+                const el = document.getElementById(`segment-${segments[segmentIndex]?.id}`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, delay);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm, segments, searchMatches, activeMatchIndex, virtualizer]);
 
     // Custom hook for auto-scrolling (supports both virtualized and non-virtualized)
     useAutoScroll({
