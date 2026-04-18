@@ -1,4 +1,5 @@
 pub mod chunker;
+pub mod commands;
 pub mod embedder;
 pub mod engine;
 pub mod fusion;
@@ -8,6 +9,7 @@ pub mod searchers;
 pub mod types;
 
 pub use chunker::{chunk_text, DEFAULT_CHUNK_SIZE, DEFAULT_OVERLAP};
+pub use commands::SearchState;
 pub use engine::HybridSearchEngine;
 pub use types::{
     Chunk, IndexingStatus, MatchKind, RankedHit, SearchHit, SourceType,

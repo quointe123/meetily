@@ -481,6 +481,34 @@ pub fn run() {
             })
             .expect("Failed to initialize database");
 
+            // ---- Semantic search state + background backfill ----
+            // AppState (with the SQLite pool) is only managed if the DB was initialized
+            // synchronously here. On true first launch, the DB is deferred until after
+            // onboarding — semantic search will initialize lazily on the first command
+            // call once AppState becomes available.
+            if let Some(app_state) = _app.try_state::<crate::state::AppState>() {
+                let pool = app_state.db_manager.pool().clone();
+                let search_state: std::sync::Arc<crate::search::SearchState> =
+                    std::sync::Arc::new(crate::search::SearchState::new(pool.clone()));
+                _app.manage(search_state.clone());
+
+                // Background backfill: non-blocking, scans meetings lacking current-model embeddings
+                let app_for_backfill = _app.handle().clone();
+                let cache_for_backfill = search_state.cache.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::search::migration::backfill(
+                        app_for_backfill,
+                        pool,
+                        cache_for_backfill,
+                    ).await {
+                        log::error!("initial semantic backfill failed: {:?}", e);
+                    }
+                });
+                log::info!("Semantic search state initialized + backfill spawned");
+            } else {
+                log::info!("AppState not available at setup (first launch); semantic search will init lazily");
+            }
+
             // Initialize bundled templates directory for dynamic template discovery
             log::info!("Initializing bundled templates directory...");
             if let Ok(resource_path) = _app.handle().path().resource_dir() {
@@ -692,6 +720,12 @@ pub fn run() {
             audio::import::is_import_in_progress_command,
             audio::import::select_multiple_audio_files_command,
             audio::import::start_import_multi_command,
+            // Semantic search commands
+            search::commands::search_meetings,
+            search::commands::get_indexing_status,
+            search::commands::reindex_all,
+            search::commands::semantic_model_is_ready,
+            search::commands::semantic_model_download,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

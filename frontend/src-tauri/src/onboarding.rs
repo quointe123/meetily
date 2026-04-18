@@ -21,6 +21,8 @@ pub struct OnboardingStatus {
 pub struct ModelStatus {
     pub parakeet: String,  // "downloaded" | "not_downloaded" | "downloading"
     pub summary: String,   // Generic field for summary model (gemma3:1b or gemma3:4b)
+    #[serde(default)]
+    pub semantic_model: String,
 }
 
 impl Default for OnboardingStatus {
@@ -32,6 +34,7 @@ impl Default for OnboardingStatus {
             model_status: ModelStatus {
                 parakeet: "not_downloaded".to_string(),
                 summary: "not_downloaded".to_string(),  // Changed from gemma
+                semantic_model: "not_downloaded".to_string(),
             },
             last_updated: chrono::Utc::now().to_rfc3339(),
         }
