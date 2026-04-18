@@ -916,7 +916,42 @@ fn write_import_metadata(
     Ok(())
 }
 
-/// Multi-file import pipeline — full implementation in Task 3
+/// Format "--- Audio N — HH:MM:SS ---" from a millisecond offset
+fn format_junction_marker(file_n: usize, offset_ms: f64) -> String {
+    let total_secs = (offset_ms / 1000.0) as u64;
+    let hh = total_secs / 3600;
+    let mm = (total_secs % 3600) / 60;
+    let ss = total_secs % 60;
+    format!("--- Audio {} \u{2014} {:02}:{:02}:{:02} ---", file_n, hh, mm, ss)
+}
+
+/// Map (offset + within_file_progress) to a global percentage in [lo, hi]
+fn global_pct(
+    offset_ms: f64,
+    within_file_ms: f64,
+    _file_duration_ms: f64,
+    total_ms: f64,
+    lo: u32,
+    hi: u32,
+) -> u32 {
+    let frac = ((offset_ms + within_file_ms) / total_ms).clamp(0.0, 1.0);
+    lo + ((hi - lo) as f64 * frac) as u32
+}
+
+/// Format seconds as "HH:MM:SS" or "MM:SS"
+fn format_duration_secs(secs: f64) -> String {
+    let total = secs as u64;
+    let hh = total / 3600;
+    let mm = (total % 3600) / 60;
+    let ss = total % 60;
+    if hh > 0 {
+        format!("{:02}:{:02}:{:02}", hh, mm, ss)
+    } else {
+        format!("{:02}:{:02}", mm, ss)
+    }
+}
+
+/// Multi-file import pipeline — processes multiple audio files as a single meeting
 async fn run_import_multi<R: Runtime>(
     app: AppHandle<R>,
     parts: Vec<AudioFilePart>,
@@ -925,9 +960,283 @@ async fn run_import_multi<R: Runtime>(
     model: Option<String>,
     provider: Option<String>,
 ) -> Result<ImportResult> {
-    // Stub — will be replaced in Task 3
-    let _ = (app, parts, title, language, model, provider);
-    Err(anyhow!("run_import_multi not yet implemented"))
+    let total_files = parts.len();
+    let use_parakeet = provider.as_deref() == Some("parakeet");
+
+    // Pre-compute expected durations (fast metadata path) for global progress
+    let estimated_durations_ms: Vec<f64> = parts
+        .iter()
+        .map(|p| {
+            extract_duration_from_metadata(Path::new(&p.path))
+                .unwrap_or(0.0)
+                * 1000.0
+        })
+        .collect();
+    let total_estimated_ms: f64 = estimated_durations_ms.iter().sum::<f64>().max(1.0);
+
+    info!(
+        "Starting multi-audio import: {} files, title='{}', total_estimated={:.1}s",
+        total_files,
+        title,
+        total_estimated_ms / 1000.0
+    );
+
+    // Create one meeting folder for all files
+    let base_folder = get_default_recordings_folder();
+    let meeting_folder = create_meeting_folder(&base_folder, &title, false)?;
+
+    // Initialize transcription engine once (reused across all files)
+    emit_progress(&app, "copying", 2, "Chargement du moteur de transcription...");
+
+    let whisper_engine = if !use_parakeet {
+        Some(get_or_init_whisper(&app, model.as_deref()).await?)
+    } else {
+        None
+    };
+    let parakeet_engine = if use_parakeet {
+        Some(get_or_init_parakeet(&app, model.as_deref()).await?)
+    } else {
+        None
+    };
+
+    let mut all_transcripts: Vec<(String, f64, f64)> = Vec::new();
+    let mut timestamp_offset_ms: f64 = 0.0;
+    let mut actual_total_duration_ms: f64 = 0.0;
+
+    for (file_idx, part) in parts.iter().enumerate() {
+        let file_n = file_idx + 1; // 1-based for display
+
+        // ── Cancellation check ──────────────────────────────────────────────
+        if IMPORT_CANCELLED.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_dir_all(&meeting_folder);
+            return Err(anyhow!("Import annulé"));
+        }
+
+        // ── Copy file ───────────────────────────────────────────────────────
+        let source = PathBuf::from(&part.path);
+        if !source.exists() {
+            let _ = std::fs::remove_dir_all(&meeting_folder);
+            return Err(anyhow!("Fichier introuvable : {}", source.display()));
+        }
+        let ext = source
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("mp4");
+        let dest_filename = format!("audio_{}.{}", file_n, ext);
+        let dest_path = meeting_folder.join(&dest_filename);
+
+        emit_progress(
+            &app,
+            "copying",
+            global_pct(timestamp_offset_ms, 0.0, estimated_durations_ms[file_idx], total_estimated_ms, 5, 85),
+            &format!("Traitement audio {} de {} — copie...", file_n, total_files),
+        );
+
+        let src = source.clone();
+        let dst = dest_path.clone();
+        tokio::task::spawn_blocking(move || std::fs::copy(&src, &dst))
+            .await
+            .map_err(|e| anyhow!("Copy join error: {}", e))?
+            .map_err(|e| anyhow!("Failed to copy audio {}: {}", file_n, e))?;
+
+        // ── Decode ──────────────────────────────────────────────────────────
+        if IMPORT_CANCELLED.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_dir_all(&meeting_folder);
+            return Err(anyhow!("Import annulé"));
+        }
+
+        emit_progress(
+            &app,
+            "decoding",
+            global_pct(timestamp_offset_ms, 0.05 * estimated_durations_ms[file_idx], estimated_durations_ms[file_idx], total_estimated_ms, 5, 85),
+            &format!("Décodage audio {} de {}...", file_n, total_files),
+        );
+
+        let path_for_decode = dest_path.clone();
+        let decoded = tokio::task::spawn_blocking(move || {
+            decode_audio_file_with_progress(&path_for_decode, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Decode join error: {}", e))??;
+
+        let file_duration_ms = decoded.duration_seconds * 1000.0;
+        info!(
+            "File {}/{}: decoded {:.2}s",
+            file_n, total_files, decoded.duration_seconds
+        );
+
+        // ── Resample ────────────────────────────────────────────────────────
+        emit_progress(
+            &app,
+            "resampling",
+            global_pct(timestamp_offset_ms, 0.1 * file_duration_ms, file_duration_ms, total_estimated_ms, 5, 85),
+            &format!("Conversion audio {} de {}...", file_n, total_files),
+        );
+
+        let audio_samples = tokio::task::spawn_blocking(move || {
+            decoded.to_whisper_format_with_progress(None)
+        })
+        .await
+        .map_err(|e| anyhow!("Resample join error: {}", e))?;
+
+        // ── VAD ─────────────────────────────────────────────────────────────
+        if IMPORT_CANCELLED.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_dir_all(&meeting_folder);
+            return Err(anyhow!("Import annulé"));
+        }
+
+        let app_for_vad = app.clone();
+        let offset_for_vad = timestamp_offset_ms;
+        let file_dur_for_vad = file_duration_ms;
+        let total_est_for_vad = total_estimated_ms;
+
+        let speech_segments = tokio::task::spawn_blocking(move || {
+            get_speech_chunks_with_progress(
+                &audio_samples,
+                VAD_REDEMPTION_TIME_MS,
+                |vad_pct, _count| {
+                    let within_file = vad_pct as f64 / 100.0 * file_dur_for_vad * 0.15;
+                    emit_progress(
+                        &app_for_vad,
+                        "vad",
+                        global_pct(offset_for_vad, within_file, file_dur_for_vad, total_est_for_vad, 5, 85),
+                        &format!("Détection parole audio {} de {}... {}%", file_n, total_files, vad_pct),
+                    );
+                    !IMPORT_CANCELLED.load(Ordering::SeqCst)
+                },
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("VAD join error: {}", e))?
+        .map_err(|e| anyhow!("VAD failed on file {}: {}", file_n, e))?;
+
+        // ── Split long segments ─────────────────────────────────────────────
+        const MAX_SEGMENT_SAMPLES: usize = 25 * 16000;
+        let mut processable: Vec<crate::audio::vad::SpeechSegment> = Vec::new();
+        for seg in &speech_segments {
+            if seg.samples.len() > MAX_SEGMENT_SAMPLES {
+                processable.extend(split_segment_at_silence(seg, MAX_SEGMENT_SAMPLES));
+            } else {
+                processable.push(seg.clone());
+            }
+        }
+        let processable_count = processable.len();
+
+        // ── Junction marker (not for first file) ───────────────────────────
+        if file_idx > 0 {
+            let marker = format_junction_marker(file_n, timestamp_offset_ms);
+            info!("Inserting junction marker: '{}'", marker);
+            all_transcripts.push((marker, timestamp_offset_ms, timestamp_offset_ms));
+        }
+
+        // ── Transcribe ──────────────────────────────────────────────────────
+        for (i, segment) in processable.iter().enumerate() {
+            if IMPORT_CANCELLED.load(Ordering::SeqCst) {
+                let _ = std::fs::remove_dir_all(&meeting_folder);
+                return Err(anyhow!("Import annulé"));
+            }
+
+            // Skip very short segments
+            if segment.samples.len() < 1600 {
+                continue;
+            }
+
+            let seg_progress_frac = (i as f64 + 1.0) / processable_count.max(1) as f64;
+            let within_file = (0.3 + seg_progress_frac * 0.55) * file_duration_ms;
+            emit_progress(
+                &app,
+                "transcribing",
+                global_pct(timestamp_offset_ms, within_file, file_duration_ms, total_estimated_ms, 5, 85),
+                &format!(
+                    "Transcription audio {} de {} — segment {}/{} ({})...",
+                    file_n,
+                    total_files,
+                    i + 1,
+                    processable_count,
+                    format_duration_secs(file_duration_ms / 1000.0)
+                ),
+            );
+
+            let (text, _conf) = if use_parakeet {
+                let engine = parakeet_engine.as_ref().unwrap();
+                let t = engine
+                    .transcribe_audio(segment.samples.clone())
+                    .await
+                    .map_err(|e| anyhow!("Parakeet failed on file {}, seg {}: {}", file_n, i, e))?;
+                (t, 0.9f32)
+            } else {
+                let engine = whisper_engine.as_ref().unwrap();
+                let (t, c, _) = engine
+                    .transcribe_audio_with_confidence(segment.samples.clone(), language.clone())
+                    .await
+                    .map_err(|e| anyhow!("Whisper failed on file {}, seg {}: {}", file_n, i, e))?;
+                (t, c)
+            };
+
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                all_transcripts.push((
+                    text,
+                    segment.start_timestamp_ms + timestamp_offset_ms,
+                    segment.end_timestamp_ms + timestamp_offset_ms,
+                ));
+            }
+        }
+
+        // ── Advance offset ──────────────────────────────────────────────────
+        timestamp_offset_ms += file_duration_ms;
+        actual_total_duration_ms += file_duration_ms;
+    }
+
+    // ── Save ─────────────────────────────────────────────────────────────────
+    emit_progress(&app, "saving", 87, "Création du compte-rendu...");
+
+    let segments = create_transcript_segments(&all_transcripts);
+
+    let app_state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| anyhow!("App state not available"))?;
+
+    let meeting_id = create_meeting_with_transcripts(
+        app_state.db_manager.pool(),
+        &title,
+        &segments,
+        meeting_folder.to_string_lossy().to_string(),
+    )
+    .await?;
+
+    emit_progress(&app, "saving", 93, "Écriture des fichiers...");
+
+    if let Err(e) = write_transcripts_json(&meeting_folder, &segments) {
+        warn!("write_transcripts_json failed: {}", e);
+    }
+
+    if let Err(e) = write_import_metadata(
+        &meeting_folder,
+        &meeting_id,
+        &title,
+        actual_total_duration_ms / 1000.0,
+        &format!("{} fichiers audio", total_files),
+        "import_multi",
+    ) {
+        warn!("write_import_metadata failed: {}", e);
+    }
+
+    emit_progress(&app, "complete", 100, "Import terminé");
+
+    info!(
+        "Multi-audio import complete: meeting='{}', {} segments, total={:.1}s",
+        meeting_id,
+        segments.len(),
+        actual_total_duration_ms / 1000.0
+    );
+
+    Ok(ImportResult {
+        meeting_id,
+        title,
+        segments_count: segments.len(),
+        duration_seconds: actual_total_duration_ms / 1000.0,
+    })
 }
 
 // ============================================================================
@@ -1376,6 +1685,21 @@ mod tests {
         assert_eq!(parsed["audio_file"], "audio.mp4");
         assert_eq!(parsed["status"], "completed");
         assert_eq!(parsed["source"], "import");
+    }
+
+    #[test]
+    fn test_junction_marker_format() {
+        // 0 ms offset → "--- Audio 2 — 00:00:00 ---"
+        let marker = format_junction_marker(2, 0.0);
+        assert_eq!(marker, "--- Audio 2 — 00:00:00 ---");
+
+        // 90 seconds = 1 min 30 sec → "--- Audio 3 — 00:01:30 ---"
+        let marker2 = format_junction_marker(3, 90_000.0);
+        assert_eq!(marker2, "--- Audio 3 — 00:01:30 ---");
+
+        // 3661 seconds = 1h 1min 1sec → "--- Audio 2 — 01:01:01 ---"
+        let marker3 = format_junction_marker(2, 3_661_000.0);
+        assert_eq!(marker3, "--- Audio 2 — 01:01:01 ---");
     }
 
     /// Integration test that decodes a real audio file and runs VAD.
