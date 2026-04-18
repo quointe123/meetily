@@ -929,7 +929,6 @@ fn format_junction_marker(file_n: usize, offset_ms: f64) -> String {
 fn global_pct(
     offset_ms: f64,
     within_file_ms: f64,
-    _file_duration_ms: f64,
     total_ms: f64,
     lo: u32,
     hi: u32,
@@ -1028,7 +1027,7 @@ async fn run_import_multi<R: Runtime>(
         emit_progress(
             &app,
             "copying",
-            global_pct(timestamp_offset_ms, 0.0, estimated_durations_ms[file_idx], total_estimated_ms, 5, 85),
+            global_pct(timestamp_offset_ms, 0.0, total_estimated_ms, 5, 85),
             &format!("Traitement audio {} de {} — copie...", file_n, total_files),
         );
 
@@ -1048,7 +1047,7 @@ async fn run_import_multi<R: Runtime>(
         emit_progress(
             &app,
             "decoding",
-            global_pct(timestamp_offset_ms, 0.05 * estimated_durations_ms[file_idx], estimated_durations_ms[file_idx], total_estimated_ms, 5, 85),
+            global_pct(timestamp_offset_ms, 0.05 * estimated_durations_ms[file_idx], total_estimated_ms, 5, 85),
             &format!("Décodage audio {} de {}...", file_n, total_files),
         );
 
@@ -1069,7 +1068,7 @@ async fn run_import_multi<R: Runtime>(
         emit_progress(
             &app,
             "resampling",
-            global_pct(timestamp_offset_ms, 0.1 * file_duration_ms, file_duration_ms, total_estimated_ms, 5, 85),
+            global_pct(timestamp_offset_ms, 0.1 * file_duration_ms, total_estimated_ms, 5, 85),
             &format!("Conversion audio {} de {}...", file_n, total_files),
         );
 
@@ -1099,7 +1098,7 @@ async fn run_import_multi<R: Runtime>(
                     emit_progress(
                         &app_for_vad,
                         "vad",
-                        global_pct(offset_for_vad, within_file, file_dur_for_vad, total_est_for_vad, 5, 85),
+                        global_pct(offset_for_vad, within_file, total_est_for_vad, 5, 85),
                         &format!("Détection parole audio {} de {}... {}%", file_n, total_files, vad_pct),
                     );
                     !IMPORT_CANCELLED.load(Ordering::SeqCst)
@@ -1146,7 +1145,7 @@ async fn run_import_multi<R: Runtime>(
             emit_progress(
                 &app,
                 "transcribing",
-                global_pct(timestamp_offset_ms, within_file, file_duration_ms, total_estimated_ms, 5, 85),
+                global_pct(timestamp_offset_ms, within_file, total_estimated_ms, 5, 85),
                 &format!(
                     "Transcription audio {} de {} — segment {}/{} ({})...",
                     file_n,

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useConfig } from '@/contexts/ConfigContext';
-import { useMultiImport, AudioFilePart } from '@/hooks/useMultiImport';
+import { useMultiImport, AudioFilePart, MAX_FILES } from '@/hooks/useMultiImport';
 import { useTranscriptionModels } from '@/hooks/useTranscriptionModels';
 import { LANGUAGES } from '@/constants/languages';
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats';
@@ -282,7 +282,7 @@ export default function ImportPage() {
       <h1 className="text-2xl font-semibold text-gray-900">Importer des fichiers audio</h1>
 
       {/* Drop zone */}
-      {!isProcessing && status !== 'error' && (
+      {!isProcessing && status !== 'error' && files.length < MAX_FILES && (
         <div
           className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
             isDragging

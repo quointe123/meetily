@@ -53,7 +53,7 @@ export interface UseMultiImportReturn {
   reset: () => void;
 }
 
-const MAX_FILES = 4;
+export const MAX_FILES = 4;
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,8 @@ export function useMultiImport(): UseMultiImportReturn {
   const [error, setError] = useState<string | null>(null);
 
   const isCancelledRef = useRef(false);
+  const filesRef = useRef<AudioFilePart[]>([]);
+  useEffect(() => { filesRef.current = files; }, [files]);
 
   // ── Tauri event listeners ────────────────────────────────────────────────────
   useEffect(() => {
@@ -119,7 +121,7 @@ export function useMultiImport(): UseMultiImportReturn {
   const addFiles = useCallback(
     async (paths: string[]) => {
       // Count currently valid (non-errored) files
-      const currentValid = files.filter(f => !f.error).length;
+      const currentValid = filesRef.current.filter(f => !f.error).length;
       const available = MAX_FILES - currentValid;
 
       if (available <= 0) {
@@ -175,7 +177,7 @@ export function useMultiImport(): UseMultiImportReturn {
         }
       }
     },
-    [files]
+    [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // ── removeFile ───────────────────────────────────────────────────────────────
@@ -213,7 +215,7 @@ export function useMultiImport(): UseMultiImportReturn {
       model?: string | null,
       provider?: string | null
     ) => {
-      const validFiles = files.filter(f => !f.error && !f.validating);
+      const validFiles = filesRef.current.filter(f => !f.error && !f.validating);
       if (validFiles.length === 0) return;
 
       isCancelledRef.current = false;
@@ -243,7 +245,7 @@ export function useMultiImport(): UseMultiImportReturn {
         setError(msg);
       }
     },
-    [files]
+    [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // ── cancelImport ─────────────────────────────────────────────────────────────
