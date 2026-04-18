@@ -14,6 +14,7 @@ interface OnboardingStatus {
   model_status: {
     parakeet: string;
     summary: string;
+    semantic_model?: string;
   };
   last_updated: string;
 }
@@ -40,6 +41,8 @@ interface OnboardingContextType {
   summaryModelDownloaded: boolean;
   summaryModelProgress: number;
   summaryModelProgressInfo: SummaryModelProgressInfo;
+  semanticModelDownloaded: boolean;
+  semanticModelProgress: number;
   selectedSummaryModel: string;
   databaseExists: boolean;
   isBackgroundDownloading: boolean;
@@ -53,6 +56,7 @@ interface OnboardingContextType {
   // Setters
   setParakeetDownloaded: (value: boolean) => void;
   setSummaryModelDownloaded: (value: boolean) => void;
+  setSemanticModelDownloaded: (value: boolean) => void;
   setSelectedSummaryModel: (value: string) => void;
   setDatabaseExists: (value: boolean) => void;
   setPermissionStatus: (permission: keyof OnboardingPermissions, status: PermissionStatus) => void;
@@ -83,6 +87,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     totalMb: 0,
     speedMbps: 0,
   });
+  const [semanticModelDownloaded, setSemanticModelDownloaded] = useState(false);
+  const [semanticModelProgress, setSemanticModelProgress] = useState(0);
   const [selectedSummaryModel, setSelectedSummaryModel] = useState<string>('gemma3:1b');
   const [databaseExists, setDatabaseExists] = useState(false);
   const [isBackgroundDownloading, setIsBackgroundDownloading] = useState(false);
@@ -115,6 +121,11 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       }
     };
     fetchRecommendation();
+
+    // Probe semantic model readiness at startup (catches out-of-onboarding installs)
+    invoke<boolean>('semantic_model_is_ready')
+      .then((ready) => { if (ready) setSemanticModelDownloaded(true); })
+      .catch((e) => console.warn('[OnboardingContext] semantic_model_is_ready probe failed:', e));
   }, []);
 
   // Initialize database silently in background (moved from SetupOverviewStep)
@@ -286,6 +297,35 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     };
   }, [selectedSummaryModel]);
 
+  // Listen to semantic search model download progress
+  useEffect(() => {
+    const unlistenSemProgress = listen<{ progress: number; status: string; message?: string }>(
+      'semantic-model-download-progress',
+      (event) => {
+        setSemanticModelProgress(event.payload.progress ?? 0);
+      }
+    );
+    const unlistenSemComplete = listen<{ progress: number; status: string }>(
+      'semantic-model-download-complete',
+      () => {
+        setSemanticModelDownloaded(true);
+        setSemanticModelProgress(100);
+      }
+    );
+    const unlistenSemError = listen<{ status: string; message?: string }>(
+      'semantic-model-download-error',
+      (event) => {
+        console.error('[OnboardingContext] Semantic model download error:', event.payload.message);
+      }
+    );
+
+    return () => {
+      unlistenSemProgress.then(fn => fn());
+      unlistenSemComplete.then(fn => fn());
+      unlistenSemError.then(fn => fn());
+    };
+  }, []);
+
   const checkDatabaseStatus = async () => {
     try {
       const isFirstLaunch = await invoke<boolean>('check_first_launch');
@@ -310,6 +350,11 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         setCompleted(verifiedStatus.completed);
         setParakeetDownloaded(verifiedStatus.parakeetDownloaded);
         setSummaryModelDownloaded(verifiedStatus.summaryModelDownloaded);
+
+        // Rehydrate semantic model status from persisted status
+        if (status.model_status?.semantic_model === 'downloaded' || status.model_status?.semantic_model === 'completed') {
+          setSemanticModelDownloaded(true);
+        }
 
         console.log('[OnboardingContext] Verified status:', verifiedStatus);
 
@@ -442,6 +487,15 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
             .catch(err => console.error('[OnboardingContext] Gemma download failed:', err));
         }, 3000); // 3 second delay to give Parakeet priority
       }
+
+      // Also start semantic search model download in parallel (non-blocking)
+      if (!semanticModelDownloaded) {
+        setTimeout(() => {
+          console.log('[OnboardingContext] Starting semantic search model download');
+          invoke('semantic_model_download')
+            .catch(err => console.error('[OnboardingContext] Semantic model download failed:', err));
+        }, 3500); // 500ms after Gemma to stagger network spikes
+      }
     } catch (error) {
       console.error('[OnboardingContext] Failed to start background downloads:', error);
       setIsBackgroundDownloading(false);
@@ -514,6 +568,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         summaryModelDownloaded,
         summaryModelProgress,
         summaryModelProgressInfo,
+        semanticModelDownloaded,
+        semanticModelProgress,
         selectedSummaryModel,
         databaseExists,
         isBackgroundDownloading,
@@ -524,6 +580,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         goPrevious,
         setParakeetDownloaded,
         setSummaryModelDownloaded,
+        setSemanticModelDownloaded,
         setSelectedSummaryModel,
         setDatabaseExists,
         setPermissionStatus,

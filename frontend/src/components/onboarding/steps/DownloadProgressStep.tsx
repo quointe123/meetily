@@ -30,6 +30,9 @@ export function DownloadProgressStep() {
     setParakeetDownloaded,
     summaryModelDownloaded,
     setSummaryModelDownloaded,
+    semanticModelDownloaded,
+    semanticModelProgress,
+    setSemanticModelDownloaded,
     startBackgroundDownloads,
     completeOnboarding,
   } = useOnboarding();
@@ -50,6 +53,14 @@ export function DownloadProgressStep() {
     progress: summaryModelDownloaded ? 100 : 0,
     downloadedMb: 0,
     totalMb: 806, // 1b model size
+    speedMbps: 0,
+  });
+
+  const [semanticState, setSemanticState] = useState<DownloadState>({
+    status: semanticModelDownloaded ? 'completed' : 'waiting',
+    progress: semanticModelDownloaded ? 100 : 0,
+    downloadedMb: 0,
+    totalMb: 470,
     speedMbps: 0,
   });
 
@@ -235,6 +246,19 @@ export function DownloadProgressStep() {
     };
   }, []);
 
+  // Sync semantic model state from context
+  useEffect(() => {
+    setSemanticState(prev => ({
+      ...prev,
+      status: semanticModelDownloaded
+        ? 'completed'
+        : prev.status === 'waiting' && semanticModelProgress > 0
+        ? 'downloading'
+        : prev.status,
+      progress: semanticModelDownloaded ? 100 : semanticModelProgress,
+    }));
+  }, [semanticModelDownloaded, semanticModelProgress]);
+
   // Listen to Gemma download progress (always downloading for builtin-ai)
   useEffect(() => {
     const unlisten = listen<{
@@ -275,7 +299,7 @@ export function DownloadProgressStep() {
 
   const startDownloads = async () => {
     // Always download both Parakeet and Gemma (system-recommended)
-    if (!parakeetDownloaded || !summaryModelDownloaded) {
+    if (!parakeetDownloaded || !summaryModelDownloaded || !semanticModelDownloaded) {
       try {
         if (!parakeetDownloaded) {
           setParakeetState((prev) => ({ ...prev, status: 'downloading' }));
@@ -283,7 +307,10 @@ export function DownloadProgressStep() {
         if (!summaryModelDownloaded) {
           setGemmaState((prev) => ({ ...prev, status: 'downloading' }));
         }
-        await startBackgroundDownloads(true);  // Always download both
+        if (!semanticModelDownloaded) {
+          setSemanticState((prev) => ({ ...prev, status: 'downloading' }));
+        }
+        await startBackgroundDownloads(true);  // Always download both + semantic
       } catch (error) {
         console.error('Failed to start downloads:', error);
         if (!parakeetDownloaded) {
@@ -457,6 +484,13 @@ export function DownloadProgressStep() {
             <Sparkles className="w-5 h-5 text-gray-600" />,
             gemmaState,
             recommendedModel === 'gemma3:4b' ? '~2.5 GB' : '~806 MB'
+          )}
+
+          {renderDownloadCard(
+            'Semantic Search Engine',
+            <Sparkles className="w-5 h-5 text-gray-600" />,
+            semanticState,
+            '~470 MB'
           )}
         </div>
 
