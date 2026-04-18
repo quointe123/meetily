@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Loader2 } from 'lucide-react';
-import { useSearchMeetings } from '@/hooks/useSearchMeetings';
+import { useSearchMeetings, SearchHit } from '@/hooks/useSearchMeetings';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { MeetingCard, MeetingCardData } from '@/components/MeetingCard';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
@@ -16,6 +17,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@/components/ui/visually-hidden';
+
+type IndexingStatus = {
+  total_meetings: number;
+  indexed_meetings: number;
+  chunks_total: number;
+  chunks_done: number;
+  in_progress: boolean;
+};
 
 export default function MeetingsPage() {
   const router = useRouter();
@@ -34,6 +43,42 @@ export default function MeetingsPage() {
 
   // Search
   const { query: searchQuery, results: searchResults, isSearching, search, clearSearch } = useSearchMeetings();
+
+  // Semantic indexing status
+  const [indexingStatus, setIndexingStatus] = useState<IndexingStatus | null>(null);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const s = await invoke<IndexingStatus>('get_indexing_status');
+        setIndexingStatus(s);
+      } catch (e) {
+        console.warn('[meetings] get_indexing_status failed:', e);
+      }
+
+      unlisten = await listen<{ processed: number; total: number; done: boolean }>(
+        'semantic-indexing-progress',
+        (ev) => {
+          setIndexingStatus((prev) => prev
+            ? ({
+                ...prev,
+                indexed_meetings: ev.payload.processed,
+                total_meetings: ev.payload.total,
+                in_progress: !ev.payload.done,
+              })
+            : {
+                total_meetings: ev.payload.total,
+                indexed_meetings: ev.payload.processed,
+                chunks_total: 0,
+                chunks_done: 0,
+                in_progress: !ev.payload.done,
+              });
+        }
+      );
+    })();
+    return () => { unlisten?.(); };
+  }, []);
 
   // Meeting cards with rich data
   const [meetingCards, setMeetingCards] = useState<MeetingCardData[]>([]);
@@ -127,6 +172,9 @@ export default function MeetingsPage() {
     }
   };
 
+  const getBestHitForMeeting = (meetingId: string): SearchHit | undefined =>
+    searchResults.find(r => r.meeting_id === meetingId);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sticky search bar */}
@@ -152,6 +200,14 @@ export default function MeetingsPage() {
             </button>
           )}
         </div>
+        {indexingStatus?.in_progress && (
+          <div className="mt-2 max-w-xl mx-auto px-3 py-2 text-xs rounded-md bg-gray-100 text-gray-500 flex items-center gap-2">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>
+              Indexation sémantique : {indexingStatus.indexed_meetings}/{indexingStatus.total_meetings} meetings
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -170,15 +226,33 @@ export default function MeetingsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {displayedMeetings.map((meeting) => (
-              <MeetingCard
-                key={meeting.id}
-                meeting={meeting}
-                onClick={() => handleCardClick(meeting)}
-                onRename={handleRenameOpen}
-                onDelete={(id) => setDeleteTarget(id)}
-                searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
-                highlightTerms={searchQuery.trim() ? searchQuery.split(/\s+/) : []}
-              />
+              <div key={meeting.id} className="flex flex-col">
+                <MeetingCard
+                  meeting={meeting}
+                  onClick={() => handleCardClick(meeting)}
+                  onRename={handleRenameOpen}
+                  onDelete={(id) => setDeleteTarget(id)}
+                  searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
+                  highlightTerms={searchQuery.trim() ? searchQuery.split(/\s+/) : []}
+                />
+                {searchQuery.trim() && (() => {
+                  const hit = getBestHitForMeeting(meeting.id);
+                  if (!hit) return null;
+                  return (
+                    <div className="flex gap-1 mt-1 px-1">
+                      {hit.match_kinds.includes('fts') && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">exact</span>
+                      )}
+                      {hit.match_kinds.includes('semantic') && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">sémantique</span>
+                      )}
+                      {hit.match_kinds.includes('fuzzy') && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">fuzzy</span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             ))}
           </div>
         )}
