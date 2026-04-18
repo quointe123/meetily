@@ -17,7 +17,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useMultiImport, AudioFilePart } from '@/hooks/useMultiImport';
 import { useTranscriptionModels } from '@/hooks/useTranscriptionModels';
 import { LANGUAGES } from '@/constants/languages';
-import { isAudioExtension } from '@/constants/audioFormats';
+import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -99,6 +99,7 @@ function FileCard({ part, index, total, onMoveUp, onMoveDown, onRemove, disabled
       {/* Reorder buttons */}
       <div className="flex flex-col gap-0.5">
         <button
+          type="button"
           onClick={onMoveUp}
           disabled={disabled || index === 0}
           className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -107,6 +108,7 @@ function FileCard({ part, index, total, onMoveUp, onMoveDown, onRemove, disabled
           <ArrowUp className="h-3.5 w-3.5 text-gray-600" />
         </button>
         <button
+          type="button"
           onClick={onMoveDown}
           disabled={disabled || index === total - 1}
           className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -118,6 +120,7 @@ function FileCard({ part, index, total, onMoveUp, onMoveDown, onRemove, disabled
 
       {/* Remove button */}
       <button
+        type="button"
         onClick={onRemove}
         disabled={disabled}
         className="p-1 rounded hover:bg-red-100 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -259,6 +262,17 @@ export default function ImportPage() {
     );
   }, [startImport, title, firstValidFile, isParakeetModel, selectedLang, selectedModel]);
 
+  const handleReset = useCallback(() => {
+    reset();
+    setTitle('');
+    setTitleModifiedByUser(false);
+  }, [reset]);
+
+  const handleCancel = useCallback(async () => {
+    await cancelImport();
+    setTitleModifiedByUser(false);
+  }, [cancelImport]);
+
   const validFiles = files.filter(f => !f.error && !f.validating);
   const hasValidFiles = validFiles.length > 0;
 
@@ -285,7 +299,7 @@ export default function ImportPage() {
             Parcourir
           </Button>
           <p className="text-xs text-gray-400 mt-2">
-            MP4, WAV, MP3, FLAC, OGG, MKV, WebM, WMA — max 4 fichiers
+            {getAudioFormatsDisplayList()} — max 4 fichiers
           </p>
         </div>
       )}
@@ -332,6 +346,7 @@ export default function ImportPage() {
       {hasValidFiles && !isProcessing && (
         <div className="border rounded-lg">
           <button
+            type="button"
             onClick={() => setShowAdvanced(v => !v)}
             className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
@@ -422,7 +437,7 @@ export default function ImportPage() {
             <p className="text-sm font-medium">Erreur lors de l'import</p>
           </div>
           <p className="text-sm text-red-600">{error}</p>
-          <Button variant="outline" size="sm" onClick={reset}>
+          <Button variant="outline" size="sm" onClick={handleReset}>
             Réessayer
           </Button>
         </div>
@@ -444,7 +459,7 @@ export default function ImportPage() {
 
       {isProcessing && (
         <div className="flex justify-end">
-          <Button variant="outline" onClick={cancelImport}>
+          <Button variant="outline" onClick={handleCancel}>
             <X className="h-4 w-4 mr-2" />
             Annuler
           </Button>
