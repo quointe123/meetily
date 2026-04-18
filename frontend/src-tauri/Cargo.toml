@@ -144,6 +144,10 @@ ffmpeg-sidecar = { git = "https://github.com/nathanbabcock/ffmpeg-sidecar", bran
 
 sqlx = { version = "0.8", features = [ "runtime-tokio", "sqlite", "chrono"] }
 
+# Semantic search dependencies
+fastembed = "5"        # ONNX-based embeddings (uses existing ort crate)
+rapidfuzz = "0.5"      # Fuzzy string matching (Levenshtein / token set ratio)
+
 # Common Tauri configuration
 tauri = { version = "2.6.2", features = [ "macos-private-api", "protocol-asset", "tray-icon"] }
 tauri-plugin-fs = "2.4.0"
