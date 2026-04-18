@@ -3,6 +3,7 @@ pub mod embedder;
 pub mod engine;
 pub mod fusion;
 pub mod indexer;
+pub mod migration;
 pub mod searchers;
 pub mod types;
 

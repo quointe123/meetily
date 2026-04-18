@@ -1,0 +1,101 @@
+use anyhow::Result;
+use serde::Serialize;
+use sqlx::{Row, SqlitePool};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Runtime};
+
+use crate::search::indexer::reindex_meeting;
+use crate::search::searchers::semantic::EmbeddingCache;
+use crate::search::types::{IndexingStatus, EMBEDDING_MODEL_ID};
+
+const BACKFILL_PARALLELISM: usize = 2; // tolérant CPU/RAM (embed est le bottleneck)
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BackfillProgress {
+    pub processed: i64,
+    pub total: i64,
+    pub current_meeting_id: Option<String>,
+    pub done: bool,
+}
+
+pub async fn current_status(pool: &SqlitePool) -> Result<IndexingStatus> {
+    let total: i64 = sqlx::query("SELECT COUNT(*) AS c FROM meetings")
+        .fetch_one(pool).await?.get("c");
+    let indexed: i64 = sqlx::query(
+        "SELECT COUNT(*) AS c FROM indexing_state WHERE status='embedded' AND model_id=?1",
+    )
+    .bind(EMBEDDING_MODEL_ID)
+    .fetch_one(pool).await?.get("c");
+    let chunks_total: i64 = sqlx::query("SELECT COALESCE(SUM(chunks_total),0) AS c FROM indexing_state")
+        .fetch_one(pool).await?.get("c");
+    let chunks_done: i64 = sqlx::query("SELECT COALESCE(SUM(chunks_done),0) AS c FROM indexing_state")
+        .fetch_one(pool).await?.get("c");
+    Ok(IndexingStatus {
+        total_meetings: total,
+        indexed_meetings: indexed,
+        chunks_total,
+        chunks_done,
+        in_progress: indexed < total,
+    })
+}
+
+/// Backfill embeddings for every meeting that isn't yet indexed with the current model.
+/// Emits `semantic-indexing-progress` events for the UI.
+pub async fn backfill<R: Runtime>(
+    app: AppHandle<R>,
+    pool: SqlitePool,
+    cache: Arc<EmbeddingCache>,
+) -> Result<()> {
+    let rows = sqlx::query(
+        r#"
+        SELECT m.id FROM meetings m
+        LEFT JOIN indexing_state s ON s.meeting_id = m.id
+        WHERE s.status IS NULL OR s.status <> 'embedded' OR s.model_id IS NULL OR s.model_id <> ?1
+        "#,
+    )
+    .bind(EMBEDDING_MODEL_ID)
+    .fetch_all(&pool)
+    .await?;
+
+    let total = rows.len() as i64;
+    let ids: Vec<String> = rows.into_iter().map(|r| r.get::<String, _>("id")).collect();
+    log::info!("semantic backfill: {} meetings to (re)index", total);
+
+    let mut processed: i64 = 0;
+    // Chunked parallelism by groups of BACKFILL_PARALLELISM
+    for batch in ids.chunks(BACKFILL_PARALLELISM) {
+        let mut handles = Vec::new();
+        for mid in batch.iter().cloned() {
+            let pool_c = pool.clone();
+            let cache_c = cache.clone();
+            handles.push(tokio::spawn(async move {
+                let res = reindex_meeting(&pool_c, &cache_c, &mid).await;
+                (mid, res)
+            }));
+        }
+        for h in handles {
+            match h.await {
+                Ok((mid, Ok(()))) => {
+                    processed += 1;
+                    let _ = app.emit("semantic-indexing-progress", BackfillProgress {
+                        processed, total, current_meeting_id: Some(mid), done: false,
+                    });
+                }
+                Ok((mid, Err(e))) => {
+                    log::error!("backfill failed for {}: {:?}", mid, e);
+                    let _ = sqlx::query(
+                        "UPDATE indexing_state SET status='failed', last_error=?1 WHERE meeting_id=?2",
+                    )
+                    .bind(format!("{:?}", e)).bind(&mid).execute(&pool).await;
+                }
+                Err(e) => log::error!("join error during backfill: {:?}", e),
+            }
+        }
+    }
+
+    let _ = app.emit("semantic-indexing-progress", BackfillProgress {
+        processed, total, current_meeting_id: None, done: true,
+    });
+    log::info!("semantic backfill: done ({}/{})", processed, total);
+    Ok(())
+}
