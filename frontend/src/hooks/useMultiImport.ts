@@ -30,7 +30,7 @@ export interface ImportProgress {
   message: string;
 }
 
-export type MultiImportStatus = 'idle' | 'validating' | 'processing' | 'complete' | 'error';
+export type MultiImportStatus = 'idle' | 'processing' | 'complete' | 'error';
 
 export interface UseMultiImportReturn {
   files: AudioFilePart[];
