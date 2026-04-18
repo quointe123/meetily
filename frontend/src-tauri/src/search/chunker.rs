@@ -115,4 +115,14 @@ mod tests {
         // Each chunk must contain only valid UTF-8 (implicit: String construction would panic otherwise)
         assert!(out.iter().all(|c| !c.chunk_text.is_empty()));
     }
+
+    #[test]
+    fn word_longer_than_chunk_size_does_not_loop_forever() {
+        // Single 1000-char run with no whitespace to snap to. The word-boundary
+        // fallback must force progress. Regression guard against infinite loop.
+        let text = "a".repeat(1000);
+        let out = chunk_text("m1", SourceType::Transcript, None, &text, 400, 100);
+        assert!(out.len() >= 2);
+        assert!(out.iter().all(|c| !c.chunk_text.is_empty()));
+    }
 }
