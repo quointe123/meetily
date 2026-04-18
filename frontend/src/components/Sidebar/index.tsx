@@ -23,6 +23,7 @@ const Sidebar: React.FC = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => router.push('/')}
                   className={`p-2 rounded-full transition-colors duration-150 shadow-sm ${
                     isHomePage ? 'bg-red-600' : 'bg-red-500 hover:bg-red-600'
@@ -39,6 +40,7 @@ const Sidebar: React.FC = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => router.push('/import')}
                   className={`p-2 rounded-lg transition-colors duration-150 ${
                     isImportPage ? 'bg-gray-200' : 'hover:bg-gray-100'
@@ -55,6 +57,7 @@ const Sidebar: React.FC = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => router.push('/meetings')}
                   className={`p-2 rounded-lg transition-colors duration-150 ${
                     isMeetingsPage ? 'bg-gray-200' : 'hover:bg-gray-100'
@@ -71,6 +74,7 @@ const Sidebar: React.FC = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => router.push('/settings')}
                   className={`p-2 rounded-lg transition-colors duration-150 ${
                     isSettingsPage ? 'bg-gray-200' : 'hover:bg-gray-100'
