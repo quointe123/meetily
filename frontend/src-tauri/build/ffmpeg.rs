@@ -122,12 +122,21 @@ fn download_and_extract_ffmpeg(
 }
 
 /// Get FFmpeg download URL for specific target triple
+///
+/// URLs point to the upstream official static-build providers (gyan.dev for Windows,
+/// johnvansickle.com for Linux). For macOS we keep a pinned mirror — see TODO below.
+///
+/// TODO(self-hosting): Mirror these binaries on our own S3/CDN to avoid depending on
+/// third-party hosts. Same applies to the whisper-server binary download in
+/// `backend/start_with_output.ps1`.
 fn get_ffmpeg_url_for_target(target: &str) -> Result<String, String> {
     // Platform-specific URLs
     let url = if target.contains("windows") {
-        // Windows
-        "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1-essentials_build.zip"
+        // Windows — official "essentials" build from gyan.dev
+        "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-essentials_build.zip"
     } else if target.contains("apple") {
+        // macOS — no stable upstream GitHub mirror exists for both arches.
+        // TODO(self-hosting): replace with our own mirror.
         if target.contains("aarch64") {
             // Apple Silicon (M1/M2/M3)
             "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg80arm.zip"
@@ -136,12 +145,13 @@ fn get_ffmpeg_url_for_target(target: &str) -> Result<String, String> {
             "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1.zip"
         }
     } else if target.contains("linux") {
+        // Linux — official static builds from johnvansickle.com (the upstream of most mirrors)
         if target.contains("aarch64") || target.contains("arm") {
             // Linux ARM64
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-arm64-static.tar.xz"
+            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz"
         } else {
             // Linux x86_64
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-amd64-static.tar.xz"
+            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
         }
     } else {
         return Err(format!("Unsupported target platform: {}", target));

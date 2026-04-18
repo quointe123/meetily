@@ -236,8 +236,14 @@ impl ContinuousVadProcessor {
                         self.last_logged_state = true;
                     }
                     self.in_speech = true;
-                    // Use 16000 (VAD processing rate) since processed_samples counts 16kHz samples
-                    self.speech_start_sample = self.processed_samples + (timestamp_ms * 16000 / 1000);
+                    // silero_rs reports `timestamp_ms` as ABSOLUTE ms since the VAD session
+                    // started (not an offset within the current chunk). `processed_samples`
+                    // is also cumulative since session start, so adding the two would
+                    // double-count and put `speech_start_sample` in the future relative to
+                    // `processed_samples` at flush() time — that produced negative segment
+                    // durations like `min=-606690ms` in the import diagnostic logs.
+                    // Just convert the absolute timestamp to its sample index at 16kHz.
+                    self.speech_start_sample = timestamp_ms * 16000 / 1000;
                     self.current_speech.clear();
                 }
                 VadTransition::SpeechEnd { start_timestamp_ms, end_timestamp_ms, samples } => {
