@@ -48,6 +48,7 @@ pub mod anthropic;
 pub mod groq;
 pub mod openrouter;
 pub mod parakeet_engine;
+pub mod search;
 pub mod state;
 pub mod summary;
 pub mod tray;
