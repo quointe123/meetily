@@ -103,7 +103,13 @@ pub fn clean_llm_markdown_output(markdown: &str) -> String {
     // Remove <think>...</think> or <thinking>...</thinking> blocks using cached regex
     let without_thinking = THINKING_TAG_REGEX.replace_all(markdown, "");
 
-    let trimmed = without_thinking.trim();
+    // Strip XML template wrapper tags that may leak from the system prompt into the output
+    // (small models like gemma3:1b tend to echo closing tags from the system prompt)
+    let cleaned = without_thinking
+        .replace("</template>", "")
+        .replace("<template>", "");
+
+    let trimmed = cleaned.trim();
 
     // List of possible language identifiers for code blocks
     const PREFIXES: &[&str] = &["```markdown\n", "```\n"];
@@ -419,9 +425,12 @@ pub async fn generate_meeting_summary(
     let template = templates::get_template(template_id)
         .map_err(|e| format!("Failed to load template '{}': {}", template_id, e))?;
 
-    // Generate markdown structure and section instructions using template methods
-    let clean_template_markdown = template.to_markdown_structure();
-    let section_instructions = template.to_section_instructions();
+    // Generate markdown structure and section instructions using template methods.
+    // Pass the language so section headers are already translated in the template —
+    // small models (1B) reliably reproduce the structure they're given rather than
+    // translating English headers on their own.
+    let clean_template_markdown = template.to_markdown_structure(language);
+    let section_instructions = template.to_section_instructions(language);
 
     // Build language instruction
     let language_instruction = language_code_to_name(language)

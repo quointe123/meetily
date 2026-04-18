@@ -18,11 +18,11 @@
 //! // Load a specific template
 //! let template = templates::get_template("daily_standup")?;
 //!
-//! // Generate markdown structure
-//! let markdown = template.to_markdown_structure();
+//! // Generate markdown structure (with translated section headers)
+//! let markdown = template.to_markdown_structure("fr");
 //!
-//! // Generate LLM instructions
-//! let instructions = template.to_section_instructions();
+//! // Generate LLM instructions (with translated section titles)
+//! let instructions = template.to_section_instructions("fr");
 //!
 //! // List available templates
 //! let available = templates::list_templates();

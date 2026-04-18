@@ -4,22 +4,55 @@
   "sections": [
     {
       "title": "Summary",
+      "title_translations": {
+        "fr": "Résumé",
+        "de": "Zusammenfassung",
+        "es": "Resumen",
+        "it": "Sommario",
+        "pt": "Resumo",
+        "nl": "Samenvatting"
+      },
       "instruction": "Provide a brief, one-paragraph executive summary of the entire meeting.",
       "format": "paragraph"
     },
     {
       "title": "Key Decisions",
+      "title_translations": {
+        "fr": "Décisions clés",
+        "de": "Wichtige Entscheidungen",
+        "es": "Decisiones clave",
+        "it": "Decisioni chiave",
+        "pt": "Decisões principais",
+        "nl": "Belangrijke beslissingen"
+      },
       "instruction": "List the most important decisions made during the meeting.",
-      "format": "list"
+      "format": "list",
+      "example_item_format": "- [Description of the decision]"
     },
     {
       "title": "Action Items",
+      "title_translations": {
+        "fr": "Points d'action",
+        "de": "Aufgaben",
+        "es": "Puntos de acción",
+        "it": "Azioni da intraprendere",
+        "pt": "Itens de ação",
+        "nl": "Actiepunten"
+      },
       "instruction": "List all assigned tasks with their owners and due date. Always add reference transcript segment and timestamp in the table.",
       "format": "list",
       "item_format": "| **Owner** | Task | Due | Reference Transcript Segment | Segment Time stamp |\n| --- | --- | --- | --- | --- |"
     },
     {
       "title": "Discussion Highlights",
+      "title_translations": {
+        "fr": "Points clés de la discussion",
+        "de": "Diskussionshöhepunkte",
+        "es": "Puntos destacados de la discusión",
+        "it": "Punti salienti della discussione",
+        "pt": "Destaques da discussão",
+        "nl": "Discussiehoogtepunten"
+      },
       "instruction": "Summarize the main topics of discussion, key arguments, and important insights.",
       "format": "paragraph"
     }

@@ -4,34 +4,83 @@
   "sections": [
     {
       "title": "Date",
+      "title_translations": {
+        "fr": "Date",
+        "de": "Datum",
+        "es": "Fecha",
+        "it": "Data",
+        "pt": "Data",
+        "nl": "Datum"
+      },
       "instruction": "YYYY-MM-DD",
       "format": "string"
     },
     {
       "title": "Attendees",
+      "title_translations": {
+        "fr": "Participants",
+        "de": "Teilnehmer",
+        "es": "Asistentes",
+        "it": "Partecipanti",
+        "pt": "Participantes",
+        "nl": "Deelnemers"
+      },
       "instruction": "List of participants present",
-      "format": "list"
+      "format": "list",
+      "example_item_format": "- [Name] ([Role])"
     },
     {
       "title": "Yesterday",
+      "title_translations": {
+        "fr": "Hier",
+        "de": "Gestern",
+        "es": "Ayer",
+        "it": "Ieri",
+        "pt": "Ontem",
+        "nl": "Gisteren"
+      },
       "instruction": "What I completed yesterday (short bullets)",
       "format": "list",
       "example_item_format": "| **Owner** | **Completed Work** |\n| --- | --- |"
     },
     {
       "title": "Today",
+      "title_translations": {
+        "fr": "Aujourd'hui",
+        "de": "Heute",
+        "es": "Hoy",
+        "it": "Oggi",
+        "pt": "Hoje",
+        "nl": "Vandaag"
+      },
       "instruction": "Planned work for today (short bullets)",
       "format": "list",
       "example_item_format": "| **Owner** | **Planned Work** |\n| --- | --- |"
     },
     {
       "title": "Blockers",
+      "title_translations": {
+        "fr": "Obstacles",
+        "de": "Blocker",
+        "es": "Bloqueadores",
+        "it": "Ostacoli",
+        "pt": "Obstáculos",
+        "nl": "Blokkades"
+      },
       "instruction": "Any impediments and owner if known",
       "format": "list",
       "item_format": "| **Owner** | **Blocker** | Impact |\n| --- | --- | --- |"
     },
     {
       "title": "Notes",
+      "title_translations": {
+        "fr": "Notes",
+        "de": "Notizen",
+        "es": "Notas",
+        "it": "Note",
+        "pt": "Notas",
+        "nl": "Notities"
+      },
       "instruction": "Optional quick notes or announcements",
       "format": "paragraph"
     }

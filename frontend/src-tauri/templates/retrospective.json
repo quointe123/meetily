@@ -1,45 +1,102 @@
 {
-      "name": "Retrospective (Agile)",
-      "description": "Sprint retrospective template for continuous improvement.",
-      "sections": [
-        {
-          "title": "Sprint",
-          "instruction": "Sprint name/number and date range",
-          "format": "string"
-        },
-        {
-          "title": "Attendance",
-          "instruction": "List of participants",
-          "format": "list"
-        },
-        {
-          "title": "Start Doing",
-          "instruction": "Actions or experiments to start next sprint",
-          "format": "list",
-          "item_format": "| **Idea** | **Proposer** |\n| --- | --- |"
-        },
-        {
-          "title": "Stop Doing",
-          "instruction": "Practices to stop",
-          "format": "list",
-          "item_format": "| **Practice** | **Reason** |\n| --- | --- |"
-        },
-        {
-          "title": "Continue Doing",
-          "instruction": "Practices to continue",
-          "format": "list",
-          "item_format": "| **Practice** | **Notes** |\n| --- | --- |"
-        },
-        {
-          "title": "Action Items",
-          "instruction": "Concrete experiments with owners and success metrics",
-          "format": "list",
-          "item_format": "| **Owner** | **Task** | **Due Date** | **Success Metric** |\n| --- | --- | --- | --- |"
-        },
-        {
-          "title": "Notes & Votes",
-          "instruction": "Summary and top-voted items",
-          "format": "paragraph"
-        }
-      ]
+  "name": "Retrospective (Agile)",
+  "description": "Sprint retrospective template for continuous improvement.",
+  "sections": [
+    {
+      "title": "Sprint",
+      "title_translations": {
+        "fr": "Sprint",
+        "de": "Sprint",
+        "es": "Sprint",
+        "it": "Sprint",
+        "pt": "Sprint",
+        "nl": "Sprint"
+      },
+      "instruction": "Sprint name/number and date range",
+      "format": "string"
+    },
+    {
+      "title": "Attendance",
+      "title_translations": {
+        "fr": "Participants",
+        "de": "Anwesenheit",
+        "es": "Asistencia",
+        "it": "Presenze",
+        "pt": "Presença",
+        "nl": "Aanwezigheid"
+      },
+      "instruction": "List of participants",
+      "format": "list",
+      "example_item_format": "- [Name] ([Role])"
+    },
+    {
+      "title": "Start Doing",
+      "title_translations": {
+        "fr": "À commencer",
+        "de": "Anfangen",
+        "es": "Empezar a hacer",
+        "it": "Iniziare a fare",
+        "pt": "Começar a fazer",
+        "nl": "Beginnen met"
+      },
+      "instruction": "Actions or experiments to start next sprint",
+      "format": "list",
+      "item_format": "| **Idea** | **Proposer** |\n| --- | --- |"
+    },
+    {
+      "title": "Stop Doing",
+      "title_translations": {
+        "fr": "À arrêter",
+        "de": "Aufhören",
+        "es": "Dejar de hacer",
+        "it": "Smettere di fare",
+        "pt": "Parar de fazer",
+        "nl": "Stoppen met"
+      },
+      "instruction": "Practices to stop",
+      "format": "list",
+      "item_format": "| **Practice** | **Reason** |\n| --- | --- |"
+    },
+    {
+      "title": "Continue Doing",
+      "title_translations": {
+        "fr": "À continuer",
+        "de": "Weiter machen",
+        "es": "Continuar haciendo",
+        "it": "Continuare a fare",
+        "pt": "Continuar fazendo",
+        "nl": "Doorgaan met"
+      },
+      "instruction": "Practices to continue",
+      "format": "list",
+      "item_format": "| **Practice** | **Notes** |\n| --- | --- |"
+    },
+    {
+      "title": "Action Items",
+      "title_translations": {
+        "fr": "Points d'action",
+        "de": "Aufgaben",
+        "es": "Puntos de acción",
+        "it": "Azioni da intraprendere",
+        "pt": "Itens de ação",
+        "nl": "Actiepunten"
+      },
+      "instruction": "Concrete experiments with owners and success metrics",
+      "format": "list",
+      "item_format": "| **Owner** | **Task** | **Due Date** | **Success Metric** |\n| --- | --- | --- | --- |"
+    },
+    {
+      "title": "Notes & Votes",
+      "title_translations": {
+        "fr": "Notes et votes",
+        "de": "Notizen & Abstimmungen",
+        "es": "Notas y votos",
+        "it": "Note e votazioni",
+        "pt": "Notas e votos",
+        "nl": "Notities & stemmen"
+      },
+      "instruction": "Summary and top-voted items",
+      "format": "paragraph"
     }
+  ]
+}

@@ -1,44 +1,101 @@
 {
-      "name": "Client / Sales Meeting",
-      "description": "Capture client goals, deliverables, and next steps.",
-      "sections": [
-        {
-          "title": "Meeting Metadata",
-          "instruction": "Date, time, location/modality, account manager",
-          "format": "string"
-        },
-        {
-          "title": "Attendees",
-          "instruction": "Client and vendor attendees with roles",
-          "format": "list"
-        },
-        {
-          "title": "Client Goals & Success Criteria",
-          "instruction": "What the client wants to achieve and how success will be measured",
-          "format": "paragraph"
-        },
-        {
-          "title": "Agreed Deliverables",
-          "instruction": "Deliverables, owners, and due dates",
-          "format": "list",
-          "item_format": "| **Deliverable** | **Owner** | **Due Date** |\n| --- | --- | --- |"
-        },
-        {
-          "title": "Commercial Terms Discussed",
-          "instruction": "Pricing, SLAs, payment terms or contract items discussed",
-          "format": "paragraph"
-        },
-        {
-          "title": "Risks & Concerns",
-          "instruction": "Client concerns, blockers, or escalation items",
-          "format": "list",
-          "item_format": "| **Concern** | **Impact** | **Owner** |\n| --- | --- | --- |"
-        },
-        {
-          "title": "Next Steps",
-          "instruction": "Actions, owners, and due dates",
-          "format": "list",
-          "item_format": "| **Owner** | **Action** | **Due Date** |\n| --- | --- | --- |"
-        }
-      ]
+  "name": "Client / Sales Meeting",
+  "description": "Capture client goals, deliverables, and next steps.",
+  "sections": [
+    {
+      "title": "Meeting Metadata",
+      "title_translations": {
+        "fr": "Informations de la réunion",
+        "de": "Meetingdetails",
+        "es": "Información de la reunión",
+        "it": "Dettagli della riunione",
+        "pt": "Informações da reunião",
+        "nl": "Vergaderdetails"
+      },
+      "instruction": "Date, time, location/modality, account manager",
+      "format": "string"
+    },
+    {
+      "title": "Attendees",
+      "title_translations": {
+        "fr": "Participants",
+        "de": "Teilnehmer",
+        "es": "Asistentes",
+        "it": "Partecipanti",
+        "pt": "Participantes",
+        "nl": "Deelnemers"
+      },
+      "instruction": "Client and vendor attendees with roles",
+      "format": "list",
+      "example_item_format": "- [Name] ([Role / Company])"
+    },
+    {
+      "title": "Client Goals & Success Criteria",
+      "title_translations": {
+        "fr": "Objectifs du client et critères de succès",
+        "de": "Kundenziele & Erfolgskriterien",
+        "es": "Objetivos del cliente y criterios de éxito",
+        "it": "Obiettivi del cliente e criteri di successo",
+        "pt": "Objetivos do cliente e critérios de sucesso",
+        "nl": "Klantdoelen & succescriteria"
+      },
+      "instruction": "What the client wants to achieve and how success will be measured",
+      "format": "paragraph"
+    },
+    {
+      "title": "Agreed Deliverables",
+      "title_translations": {
+        "fr": "Livrables convenus",
+        "de": "Vereinbarte Liefergegenstände",
+        "es": "Entregables acordados",
+        "it": "Deliverable concordati",
+        "pt": "Entregas acordadas",
+        "nl": "Afgesproken deliverables"
+      },
+      "instruction": "Deliverables, owners, and due dates",
+      "format": "list",
+      "item_format": "| **Deliverable** | **Owner** | **Due Date** |\n| --- | --- | --- |"
+    },
+    {
+      "title": "Commercial Terms Discussed",
+      "title_translations": {
+        "fr": "Conditions commerciales discutées",
+        "de": "Besprochene Vertragsbedingungen",
+        "es": "Términos comerciales discutidos",
+        "it": "Termini commerciali discussi",
+        "pt": "Termos comerciais discutidos",
+        "nl": "Besproken commerciële voorwaarden"
+      },
+      "instruction": "Pricing, SLAs, payment terms or contract items discussed",
+      "format": "paragraph"
+    },
+    {
+      "title": "Risks & Concerns",
+      "title_translations": {
+        "fr": "Risques et préoccupations",
+        "de": "Risiken & Bedenken",
+        "es": "Riesgos y preocupaciones",
+        "it": "Rischi e preoccupazioni",
+        "pt": "Riscos e preocupações",
+        "nl": "Risico's & zorgen"
+      },
+      "instruction": "Client concerns, blockers, or escalation items",
+      "format": "list",
+      "item_format": "| **Concern** | **Impact** | **Owner** |\n| --- | --- | --- |"
+    },
+    {
+      "title": "Next Steps",
+      "title_translations": {
+        "fr": "Prochaines étapes",
+        "de": "Nächste Schritte",
+        "es": "Próximos pasos",
+        "it": "Prossimi passi",
+        "pt": "Próximas etapas",
+        "nl": "Volgende stappen"
+      },
+      "instruction": "Actions, owners, and due dates",
+      "format": "list",
+      "item_format": "| **Owner** | **Action** | **Due Date** |\n| --- | --- | --- |"
     }
+  ]
+}

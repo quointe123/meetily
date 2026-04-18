@@ -4,46 +4,114 @@
   "sections": [
     {
       "title": "Executive Summary",
+      "title_translations": {
+        "fr": "Synthèse exécutive",
+        "de": "Zusammenfassung",
+        "es": "Resumen ejecutivo",
+        "it": "Sintesi esecutiva",
+        "pt": "Resumo executivo",
+        "nl": "Samenvatting"
+      },
       "instruction": "Write a concise but complete synthesis of the meeting's key outcomes, decisions, and next steps. This should stand alone as a one-paragraph overview that a senior stakeholder can read without needing the full report.",
       "format": "paragraph"
     },
     {
       "title": "Meeting Context",
+      "title_translations": {
+        "fr": "Contexte de la réunion",
+        "de": "Meetingkontext",
+        "es": "Contexto de la reunión",
+        "it": "Contesto della riunione",
+        "pt": "Contexto da reunião",
+        "nl": "Vergadercontext"
+      },
       "instruction": "List the meeting date, duration, participants (with roles if identifiable), and the stated objective or agenda of the meeting.",
-      "format": "list"
+      "format": "list",
+      "example_item_format": "- **[Field]**: [Value]"
     },
     {
       "title": "Key Decisions & Rationale",
+      "title_translations": {
+        "fr": "Décisions clés et justifications",
+        "de": "Wichtige Entscheidungen & Begründungen",
+        "es": "Decisiones clave y justificación",
+        "it": "Decisioni chiave e giustificazioni",
+        "pt": "Decisões principais e justificativas",
+        "nl": "Belangrijke beslissingen & motivatie"
+      },
       "instruction": "For each decision made during the meeting, document: what was decided, who proposed it, the reasoning behind it, and any conditions or caveats. Include the approximate timestamp from the transcript.",
       "format": "list",
       "item_format": "| **Decision** | **Proposed By** | **Rationale** | **Conditions/Caveats** | **Timestamp** |\n| --- | --- | --- | --- | --- |"
     },
     {
       "title": "Points of Divergence",
+      "title_translations": {
+        "fr": "Points de divergence",
+        "de": "Divergenzpunkte",
+        "es": "Puntos de divergencia",
+        "it": "Punti di divergenza",
+        "pt": "Pontos de divergência",
+        "nl": "Divergentiepunten"
+      },
       "instruction": "Identify all disagreements or differing opinions expressed during the meeting. For each, document: the topic, the positions held by different participants, whether a resolution was reached, and if so what it was. If no resolution was reached, state that explicitly.",
-      "format": "list"
+      "format": "list",
+      "item_format": "| **Topic** | **Position A** | **Position B** | **Resolution** |\n| --- | --- | --- | --- |"
     },
     {
       "title": "Risk Analysis",
+      "title_translations": {
+        "fr": "Analyse des risques",
+        "de": "Risikoanalyse",
+        "es": "Análisis de riesgos",
+        "it": "Analisi dei rischi",
+        "pt": "Análise de riscos",
+        "nl": "Risicoanalyse"
+      },
       "instruction": "List all risks mentioned explicitly or implied during the discussion. For each risk, assess: severity (High/Medium/Low), likelihood if discernible, potential impact, and any mitigation actions proposed. Include risks that participants may not have explicitly labeled as risks but that emerge from the discussion.",
       "format": "list",
       "item_format": "| **Risk** | **Severity** | **Impact** | **Mitigation Proposed** | **Owner** |\n| --- | --- | --- | --- | --- |"
     },
     {
       "title": "Recommendations",
+      "title_translations": {
+        "fr": "Recommandations",
+        "de": "Empfehlungen",
+        "es": "Recomendaciones",
+        "it": "Raccomandazioni",
+        "pt": "Recomendações",
+        "nl": "Aanbevelingen"
+      },
       "instruction": "List all recommended actions in order of priority. For each, include: the action, the responsible person (if mentioned), the deadline (if mentioned), and a brief justification drawn from the discussion.",
       "format": "list",
       "item_format": "| **Priority** | **Action** | **Owner** | **Deadline** | **Justification** |\n| --- | --- | --- | --- | --- |"
     },
     {
       "title": "Detailed Discussion Log",
+      "title_translations": {
+        "fr": "Journal détaillé des discussions",
+        "de": "Detailliertes Diskussionsprotokoll",
+        "es": "Registro detallado de la discusión",
+        "it": "Registro dettagliato delle discussioni",
+        "pt": "Registro detalhado das discussões",
+        "nl": "Gedetailleerd discussielogboek"
+      },
       "instruction": "Provide a chronological summary of all topics discussed. For each topic, include: the subject, key points raised by participants with direct quotes where impactful, and the outcome or conclusion. Use timestamps from the transcript to anchor the chronology. Be thorough — this section should capture everything substantive that was said.",
-      "format": "list"
+      "format": "list",
+      "item_format": "| **Timestamp** | **Topic** | **Key Points** | **Outcome** |\n| --- | --- | --- | --- |"
     },
     {
       "title": "Appendices",
+      "title_translations": {
+        "fr": "Annexes",
+        "de": "Anhänge",
+        "es": "Apéndices",
+        "it": "Appendici",
+        "pt": "Apêndices",
+        "nl": "Bijlagen"
+      },
       "instruction": "List all specific numbers, statistics, documents, tools, URLs, or external references mentioned during the meeting. Include the context in which they were mentioned.",
-      "format": "list"
+      "format": "list",
+      "item_format": "| **Type** | **Reference** | **Context** |\n| --- | --- | --- |"
     }
   ]
 }

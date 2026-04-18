@@ -4,45 +4,110 @@
   "sections": [
     {
       "title": "Meeting Date & Time",
+      "title_translations": {
+        "fr": "Date et heure de la réunion",
+        "de": "Datum und Uhrzeit",
+        "es": "Fecha y hora de la reunión",
+        "it": "Data e ora della riunione",
+        "pt": "Data e hora da reunião",
+        "nl": "Datum en tijd van de vergadering"
+      },
       "instruction": "Date, start/end time, facilitator name",
       "format": "string"
     },
     {
       "title": "Attendees",
+      "title_translations": {
+        "fr": "Participants",
+        "de": "Teilnehmer",
+        "es": "Asistentes",
+        "it": "Partecipanti",
+        "pt": "Participantes",
+        "nl": "Deelnemers"
+      },
       "instruction": "List attendees and their roles",
-      "format": "list"
+      "format": "list",
+      "example_item_format": "- [Name] ([Role])"
     },
     {
       "title": "Milestones & Status",
+      "title_translations": {
+        "fr": "Jalons et statut",
+        "de": "Meilensteine & Status",
+        "es": "Hitos y estado",
+        "it": "Traguardi e stato",
+        "pt": "Marcos e status",
+        "nl": "Mijlpalen & status"
+      },
       "instruction": "Current milestones with status and estimated completion date",
       "format": "list",
       "item_format": "| **Milestone** | **Status** | **ETA** |\n| --- | --- | --- |"
     },
     {
       "title": "Progress Summary",
+      "title_translations": {
+        "fr": "Résumé des avancées",
+        "de": "Fortschrittszusammenfassung",
+        "es": "Resumen del progreso",
+        "it": "Riepilogo dei progressi",
+        "pt": "Resumo do progresso",
+        "nl": "Voortgangsoverzicht"
+      },
       "instruction": "Short paragraph summarizing progress since last sync meeting",
       "format": "paragraph"
     },
     {
       "title": "Top Risks & Mitigations",
+      "title_translations": {
+        "fr": "Risques principaux et mitigations",
+        "de": "Hauptrisiken & Gegenmaßnahmen",
+        "es": "Principales riesgos y mitigaciones",
+        "it": "Rischi principali e mitigazioni",
+        "pt": "Principais riscos e mitigações",
+        "nl": "Toprisico's & mitigaties"
+      },
       "instruction": "List top risks with impact level, mitigation plan, and owner",
       "format": "list",
       "item_format": "| **Risk** | **Impact** | **Mitigation** | **Owner** |\n| --- | --- | --- | --- |"
     },
     {
       "title": "Key Decisions",
+      "title_translations": {
+        "fr": "Décisions clés",
+        "de": "Wichtige Entscheidungen",
+        "es": "Decisiones clave",
+        "it": "Decisioni chiave",
+        "pt": "Decisões principais",
+        "nl": "Belangrijke beslissingen"
+      },
       "instruction": "Decisions made in this meeting with rationale and timestamp",
       "format": "list",
       "item_format": "| **Decision** | **Rationale** | **Timestamp** |\n| --- | --- | --- |"
     },
     {
       "title": "Action Items",
+      "title_translations": {
+        "fr": "Points d'action",
+        "de": "Aufgaben",
+        "es": "Puntos de acción",
+        "it": "Azioni da intraprendere",
+        "pt": "Itens de ação",
+        "nl": "Actiepunten"
+      },
       "instruction": "Tasks with owners, due dates, priority, and status",
       "format": "list",
       "item_format": "| **Owner** | **Task** | **Due Date** | **Priority** | **Status** |\n| --- | --- | --- | --- | --- |"
     },
     {
       "title": "Related Documents",
+      "title_translations": {
+        "fr": "Documents liés",
+        "de": "Zugehörige Dokumente",
+        "es": "Documentos relacionados",
+        "it": "Documenti correlati",
+        "pt": "Documentos relacionados",
+        "nl": "Gerelateerde documenten"
+      },
       "instruction": "Links to relevant documents, tickets, or designs discussed",
       "format": "list",
       "item_format": "| **Document Title** | **URL** | **Type** |\n| --- | --- | --- |"
