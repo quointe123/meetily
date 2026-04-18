@@ -4,17 +4,16 @@ import React from 'react';
 import { Settings, Mic, NotebookPen, Upload } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useImportDialog } from '@/contexts/ImportDialogContext';
 import Info from '../Info';
 
 const Sidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { openImportDialog } = useImportDialog();
 
   const isMeetingsPage = pathname === '/meetings' || pathname?.includes('/meeting-details');
   const isSettingsPage = pathname === '/settings';
   const isHomePage = pathname === '/';
+  const isImportPage = pathname === '/import';
 
   return (
     <div className="fixed top-0 left-0 h-screen z-40">
@@ -40,8 +39,10 @@ const Sidebar: React.FC = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => openImportDialog()}
-                  className="p-2 rounded-lg transition-colors duration-150 hover:bg-blue-100 bg-blue-50"
+                  onClick={() => router.push('/import')}
+                  className={`p-2 rounded-lg transition-colors duration-150 ${
+                    isImportPage ? 'bg-gray-200' : 'hover:bg-gray-100'
+                  }`}
                 >
                   <Upload className="w-5 h-5 text-blue-600" />
                 </button>
