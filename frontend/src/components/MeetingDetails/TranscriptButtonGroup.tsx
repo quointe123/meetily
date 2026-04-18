@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Copy, FolderOpen, RefreshCw } from 'lucide-react';
 import { RetranscribeDialog } from './RetranscribeDialog';
-import { useConfig } from '@/contexts/ConfigContext';
-
 
 interface TranscriptButtonGroupProps {
   transcriptCount: number;
@@ -17,7 +15,6 @@ interface TranscriptButtonGroupProps {
   onRefetchTranscripts?: () => Promise<void>;
 }
 
-
 export function TranscriptButtonGroup({
   transcriptCount,
   onCopyTranscript,
@@ -26,11 +23,9 @@ export function TranscriptButtonGroup({
   meetingFolderPath,
   onRefetchTranscripts,
 }: TranscriptButtonGroupProps) {
-  const { betaFeatures } = useConfig();
   const [showRetranscribeDialog, setShowRetranscribeDialog] = useState(false);
 
   const handleRetranscribeComplete = useCallback(async () => {
-    // Refetch transcripts to show the updated data
     if (onRefetchTranscripts) {
       await onRefetchTranscripts();
     }
@@ -42,9 +37,7 @@ export function TranscriptButtonGroup({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            onCopyTranscript();
-          }}
+          onClick={onCopyTranscript}
           disabled={transcriptCount === 0}
           title={transcriptCount === 0 ? 'No transcript available' : 'Copy Transcript'}
         >
@@ -56,23 +49,19 @@ export function TranscriptButtonGroup({
           size="sm"
           variant="outline"
           className="xl:px-4"
-          onClick={() => {
-            onOpenMeetingFolder();
-          }}
+          onClick={onOpenMeetingFolder}
           title="Open Recording Folder"
         >
           <FolderOpen className="xl:mr-2" size={18} />
           <span className="hidden lg:inline">Recording</span>
         </Button>
 
-        {betaFeatures.importAndRetranscribe && meetingId && meetingFolderPath && (
+        {meetingId && meetingFolderPath && (
           <Button
             size="sm"
             variant="outline"
             className="bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 border-blue-200 xl:px-4"
-            onClick={() => {
-              setShowRetranscribeDialog(true);
-            }}
+            onClick={() => setShowRetranscribeDialog(true)}
             title="Retranscribe to enhance your recorded audio"
           >
             <RefreshCw className="xl:mr-2" size={18} />
@@ -81,7 +70,7 @@ export function TranscriptButtonGroup({
         )}
       </ButtonGroup>
 
-      {betaFeatures.importAndRetranscribe && meetingId && meetingFolderPath && (
+      {meetingId && meetingFolderPath && (
         <RetranscribeDialog
           open={showRetranscribeDialog}
           onOpenChange={setShowRetranscribeDialog}

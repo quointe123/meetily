@@ -5,14 +5,12 @@ import { Settings, Mic, NotebookPen, Upload } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useImportDialog } from '@/contexts/ImportDialogContext';
-import { useConfig } from '@/contexts/ConfigContext';
 import Info from '../Info';
 
 const Sidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { openImportDialog } = useImportDialog();
-  const { betaFeatures } = useConfig();
 
   const isMeetingsPage = pathname === '/meetings' || pathname?.includes('/meeting-details');
   const isSettingsPage = pathname === '/settings';
@@ -39,21 +37,19 @@ const Sidebar: React.FC = () => {
               </TooltipContent>
             </Tooltip>
 
-            {betaFeatures.importAndRetranscribe && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => openImportDialog()}
-                    className="p-2 rounded-lg transition-colors duration-150 hover:bg-blue-100 bg-blue-50"
-                  >
-                    <Upload className="w-5 h-5 text-blue-600" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Import Audio</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => openImportDialog()}
+                  className="p-2 rounded-lg transition-colors duration-150 hover:bg-blue-100 bg-blue-50"
+                >
+                  <Upload className="w-5 h-5 text-blue-600" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Import Audio</p>
+              </TooltipContent>
+            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
