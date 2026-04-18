@@ -161,7 +161,11 @@ pub async fn import_and_initialize_database(
         })?;
 
     // Update app state with the new manager
+    let pool = db_manager.pool().clone();
     app.manage(AppState { db_manager });
+
+    // Attach semantic search state (safe to call even if already attached)
+    crate::search::attach_to_app(&app, pool);
 
     info!("Legacy database imported and initialized successfully");
 
@@ -209,6 +213,9 @@ pub async fn initialize_fresh_database(app: AppHandle) -> Result<(), String> {
     ).await {
         error!("Failed to set default transcription model config: {}", e);
     }
+
+    // Attach semantic search state (safe to call even if already attached)
+    crate::search::attach_to_app(&app, pool.clone());
 
     info!("Fresh database initialized successfully with default models");
 

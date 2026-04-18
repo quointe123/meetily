@@ -484,29 +484,11 @@ pub fn run() {
             // ---- Semantic search state + background backfill ----
             // AppState (with the SQLite pool) is only managed if the DB was initialized
             // synchronously here. On true first launch, the DB is deferred until after
-            // onboarding — semantic search will initialize lazily on the first command
-            // call once AppState becomes available.
+            // onboarding — attach_to_app will be called from the DB-init commands instead.
             if let Some(app_state) = _app.try_state::<crate::state::AppState>() {
-                let pool = app_state.db_manager.pool().clone();
-                let search_state: std::sync::Arc<crate::search::SearchState> =
-                    std::sync::Arc::new(crate::search::SearchState::new(pool.clone()));
-                _app.manage(search_state.clone());
-
-                // Background backfill: non-blocking, scans meetings lacking current-model embeddings
-                let app_for_backfill = _app.handle().clone();
-                let cache_for_backfill = search_state.cache.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = crate::search::migration::backfill(
-                        app_for_backfill,
-                        pool,
-                        cache_for_backfill,
-                    ).await {
-                        log::error!("initial semantic backfill failed: {:?}", e);
-                    }
-                });
-                log::info!("Semantic search state initialized + backfill spawned");
+                crate::search::attach_to_app(&_app.handle(), app_state.db_manager.pool().clone());
             } else {
-                log::info!("AppState not available at setup (first launch); semantic search will init lazily");
+                log::info!("AppState not available at setup (first launch); semantic search will attach after DB init");
             }
 
             // Initialize bundled templates directory for dynamic template discovery
