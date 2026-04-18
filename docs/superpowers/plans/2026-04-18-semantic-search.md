@@ -6,7 +6,8 @@
 
 **Architecture:** New `search/` Rust module in `frontend/src-tauri/src/`. Three searchers run in parallel (FTS5 via sqlx, cosine over in-RAM embeddings, rapidfuzz rescore of FTS candidates), fused with Reciprocal Rank Fusion. Embeddings produced by `fastembed-rs` + `multilingual-e5-small` (ONNX, ~470 MB, auto-downloaded at onboarding). Storage in the existing SQLite (new tables + FTS5 virtual table). Existing meetings re-indexed in background at first boot.
 
-**Tech Stack:** Rust (tokio, sqlx, fastembed 4.x, rapidfuzz 0.5, once_cell), SQLite FTS5, Tauri 2.6, Next.js 14 / React 18 frontend.
+**Tech Stack:** Rust (tokio, sqlx, fastembed 5.x, rapidfuzz 0.5, once_cell), SQLite FTS5, Tauri 2.6, Next.js 14 / React 18 frontend.
+*(Note: fastembed 5 was chosen over 4 because fastembed 4 pins `ort` to rc.5 while the repo already uses `ort = "2.0.0-rc.10"` for Parakeet — fastembed 5 is compatible with rc.10.)*
 
 **Spec reference:** [docs/superpowers/specs/2026-04-18-semantic-search-design.md](../specs/2026-04-18-semantic-search-design.md)
 
@@ -25,7 +26,7 @@ Edit `frontend/src-tauri/Cargo.toml`, locate the `[dependencies]` block (line 64
 
 ```toml
 # Semantic search dependencies
-fastembed = "4"        # ONNX-based embeddings (uses existing ort crate)
+fastembed = "5"        # ONNX-based embeddings (compatible with existing ort = 2.0.0-rc.10)
 rapidfuzz = "0.5"      # Fuzzy string matching (Levenshtein / token set ratio)
 ```
 
