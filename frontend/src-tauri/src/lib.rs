@@ -606,7 +606,6 @@ pub fn run() {
             api::api_get_meetings,
             api::api_get_meetings_cards,
             api::api_search_transcripts,
-            api::api_search_meetings,
             api::api_get_profile,
             api::api_save_profile,
             api::api_update_profile,

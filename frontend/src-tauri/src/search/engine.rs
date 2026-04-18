@@ -80,6 +80,7 @@ impl HybridSearchEngine {
                     meeting_id: chunk.meeting_id.clone(),
                     meeting_title: meeting_title.clone(),
                     source_type: chunk.source_type,
+                    source_id: chunk.source_id.clone(),
                     chunk_text: chunk.chunk_text.clone(),
                     char_start: chunk.char_start,
                     char_end: chunk.char_end,

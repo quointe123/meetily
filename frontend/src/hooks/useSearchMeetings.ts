@@ -3,25 +3,26 @@
 import { useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
-export interface SearchMatch {
-  transcript_id: string;
-  text: string;
-  timestamp: string;
-  highlight_start: number;
-  highlight_end: number;
-  match_type: string;
-}
+export type SourceType =
+  | 'transcript' | 'title' | 'summary' | 'action_items' | 'key_points' | 'notes';
 
-export interface SearchMeetingResult {
+export type MatchKind = 'fts' | 'semantic' | 'fuzzy';
+
+export interface SearchHit {
   meeting_id: string;
-  title: string;
+  meeting_title: string;
+  source_type: SourceType;
+  source_id: string | null;
+  chunk_text: string;
+  char_start: number | null;
+  char_end: number | null;
   score: number;
-  matches: SearchMatch[];
+  match_kinds: MatchKind[];
 }
 
 interface UseSearchMeetingsReturn {
   query: string;
-  results: SearchMeetingResult[];
+  results: SearchHit[];
   isSearching: boolean;
   search: (query: string) => void;
   clearSearch: () => void;
@@ -29,32 +30,26 @@ interface UseSearchMeetingsReturn {
 
 export function useSearchMeetings(): UseSearchMeetingsReturn {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchMeetingResult[]>([]);
+  const [results, setResults] = useState<SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const search = useCallback((searchQuery: string) => {
     setQuery(searchQuery);
-
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!searchQuery.trim()) {
       setResults([]);
       setIsSearching(false);
       return;
     }
-
     setIsSearching(true);
-
     debounceRef.current = setTimeout(async () => {
       try {
-        const searchResults = await invoke('api_search_meetings', {
+        const hits = await invoke<SearchHit[]>('search_meetings', {
           query: searchQuery,
           limit: 20,
-        }) as SearchMeetingResult[];
-        setResults(searchResults);
+        });
+        setResults(hits);
       } catch (error) {
         console.error('Search failed:', error);
         setResults([]);
@@ -68,9 +63,7 @@ export function useSearchMeetings(): UseSearchMeetingsReturn {
     setQuery('');
     setResults([]);
     setIsSearching(false);
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
   return { query, results, isSearching, search, clearSearch };

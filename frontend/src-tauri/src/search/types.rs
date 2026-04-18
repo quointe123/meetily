@@ -79,6 +79,7 @@ pub struct SearchHit {
     pub meeting_id: String,
     pub meeting_title: String,
     pub source_type: SourceType,
+    pub source_id: Option<String>,
     pub chunk_text: String,
     pub char_start: Option<i64>,
     pub char_end: Option<i64>,

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Loader2 } from 'lucide-react';
-import { useSearchMeetings, SearchMeetingResult } from '@/hooks/useSearchMeetings';
+import { useSearchMeetings } from '@/hooks/useSearchMeetings';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
@@ -66,24 +66,29 @@ export default function MeetingsPage() {
 
   // Get search snippet for a card
   const getSearchSnippet = (meetingId: string): string | null => {
-    const result = searchResults.find(r => r.meeting_id === meetingId);
-    if (!result || !result.matches.length) return null;
-    const match = result.matches[0];
-    const start = Math.max(0, match.highlight_start - 50);
-    const end = Math.min(match.text.length, match.highlight_end + 50);
-    let snippet = match.text.slice(start, end);
-    if (start > 0) snippet = '...' + snippet;
-    if (end < match.text.length) snippet += '...';
+    const hits = searchResults.filter(r => r.meeting_id === meetingId);
+    if (hits.length === 0) return null;
+    // Prefer the highest-scored hit (already sorted by backend, but filter-safe)
+    const hit = hits[0];
+    const start = hit.char_start ?? 0;
+    const end = hit.char_end ?? hit.chunk_text.length;
+    const before = Math.max(0, start - 50);
+    const after = Math.min(hit.chunk_text.length, end + 50);
+    let snippet = hit.chunk_text.slice(before, after);
+    if (before > 0) snippet = '...' + snippet;
+    if (after < hit.chunk_text.length) snippet += '...';
     return snippet;
   };
 
   const handleCardClick = (meeting: MeetingCardData) => {
     setCurrentMeeting({ id: meeting.id, title: meeting.title });
     if (searchQuery.trim()) {
-      const result = searchResults.find(r => r.meeting_id === meeting.id);
-      const match = result?.matches[0];
-      if (match) {
-        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}&transcript_id=${match.transcript_id}&highlight_start=${match.highlight_start}&highlight_end=${match.highlight_end}`);
+      // Find the first transcript hit for this meeting (has source_id pointing to a transcript row)
+      const hit = searchResults.find(
+        r => r.meeting_id === meeting.id && r.source_type === 'transcript' && r.source_id
+      );
+      if (hit && hit.char_start !== null && hit.char_end !== null) {
+        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}&transcript_id=${hit.source_id}&highlight_start=${hit.char_start}&highlight_end=${hit.char_end}`);
         return;
       }
     }
