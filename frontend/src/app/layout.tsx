@@ -7,7 +7,7 @@ import { SidebarProvider } from '@/components/Sidebar/SidebarProvider'
 import MainContent from '@/components/MainContent'
 import { Toaster, toast } from 'sonner'
 import "sonner/dist/styles.css"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -57,7 +57,10 @@ export default function RootLayout({
 
   // Forward tray recording toggle to the recording page
   useEffect(() => {
-    const unlisten = listen('request-recording-toggle', () => {
+    let cancelled = false
+    let unlisten: (() => void) | undefined
+
+    listen('request-recording-toggle', () => {
       if (showOnboarding) {
         toast.error("Please complete setup first", {
           description: "You need to finish onboarding before you can start recording."
@@ -65,14 +68,24 @@ export default function RootLayout({
       } else {
         window.dispatchEvent(new CustomEvent('start-recording-from-sidebar'))
       }
+    }).then(fn => {
+      if (cancelled) {
+        fn() // already unmounted, unsubscribe immediately
+      } else {
+        unlisten = fn
+      }
     })
-    return () => { unlisten.then(fn => fn()) }
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
   }, [showOnboarding])
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false)
-    window.location.reload()
-  }
+    window.location.reload() // Full reload ensures all Tauri state is re-initialized after onboarding
+  }, [])
 
   return (
     <html lang="en">
