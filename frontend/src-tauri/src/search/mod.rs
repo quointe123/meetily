@@ -2,6 +2,7 @@ pub mod chunker;
 pub mod embedder;
 pub mod engine;
 pub mod fusion;
+pub mod indexer;
 pub mod searchers;
 pub mod types;
 
