@@ -106,6 +106,13 @@ pub struct ImportStarted {
     pub message: String,
 }
 
+/// One audio file in an ordered multi-file import list
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioFilePart {
+    pub path: String,
+    pub order: u32, // 1-based, already sorted by the frontend
+}
+
 /// Check if import is currently in progress
 pub fn is_import_in_progress() -> bool {
     IMPORT_IN_PROGRESS.load(Ordering::SeqCst)
@@ -909,6 +916,20 @@ fn write_import_metadata(
     Ok(())
 }
 
+/// Multi-file import pipeline — full implementation in Task 3
+async fn run_import_multi<R: Runtime>(
+    app: AppHandle<R>,
+    parts: Vec<AudioFilePart>,
+    title: String,
+    language: Option<String>,
+    model: Option<String>,
+    provider: Option<String>,
+) -> Result<ImportResult> {
+    // Stub — will be replaced in Task 3
+    let _ = (app, parts, title, language, model, provider);
+    Err(anyhow!("run_import_multi not yet implemented"))
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -1002,6 +1023,120 @@ pub async fn cancel_import_command() -> Result<(), String> {
 #[tauri::command]
 pub async fn is_import_in_progress_command() -> bool {
     is_import_in_progress()
+}
+
+/// Open a multi-file picker and return the selected paths (no validation)
+#[tauri::command]
+pub async fn select_multiple_audio_files_command<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let app_clone = app.clone();
+    let paths = tokio::task::spawn_blocking(move || {
+        app_clone
+            .dialog()
+            .file()
+            .add_filter(
+                "Audio Files",
+                &AUDIO_EXTENSIONS.iter().map(|s| *s).collect::<Vec<_>>(),
+            )
+            .blocking_pick_files()
+    })
+    .await
+    .map_err(|e| format!("File dialog task failed: {}", e))?;
+
+    Ok(match paths {
+        Some(list) => list.iter().map(|p| p.to_string()).collect(),
+        None => vec![],
+    })
+}
+
+/// Start a multi-audio import (1–4 files).
+/// With a single file, delegates to the existing single-file pipeline (zero regression).
+#[tauri::command]
+pub async fn start_import_multi_command<R: Runtime>(
+    app: AppHandle<R>,
+    parts: Vec<AudioFilePart>,
+    title: String,
+    language: Option<String>,
+    model: Option<String>,
+    provider: Option<String>,
+) -> Result<ImportStarted, String> {
+    if IMPORT_IN_PROGRESS.load(Ordering::SeqCst) {
+        return Err("Import already in progress".to_string());
+    }
+    if parts.is_empty() {
+        return Err("No files provided".to_string());
+    }
+
+    // Sort by order field (frontend should already send them sorted)
+    let mut sorted_parts = parts;
+    sorted_parts.sort_by_key(|p| p.order);
+
+    tauri::async_runtime::spawn(async move {
+        let use_parakeet = provider.as_deref() == Some("parakeet");
+
+        let result = if sorted_parts.len() == 1 {
+            // Single file: delegate to existing start_import (zero regression)
+            start_import(
+                app.clone(),
+                sorted_parts[0].path.clone(),
+                title,
+                language,
+                model,
+                provider,
+            )
+            .await
+        } else {
+            // Multi-file pipeline
+            let _guard = match ImportGuard::acquire() {
+                Ok(g) => g,
+                Err(e) => {
+                    let _ = app.emit("import-error", ImportError { error: e });
+                    return;
+                }
+            };
+            IMPORT_CANCELLED.store(false, Ordering::SeqCst);
+
+            let res = run_import_multi(
+                app.clone(),
+                sorted_parts,
+                title,
+                language,
+                model,
+                provider,
+            )
+            .await;
+
+            super::common::unload_engine_after_batch(use_parakeet).await;
+
+            match &res {
+                Ok(r) => {
+                    let _ = app.emit(
+                        "import-complete",
+                        serde_json::json!({
+                            "meeting_id": r.meeting_id,
+                            "title": r.title,
+                            "segments_count": r.segments_count,
+                            "duration_seconds": r.duration_seconds
+                        }),
+                    );
+                }
+                Err(e) => {
+                    let _ = app.emit("import-error", ImportError { error: e.to_string() });
+                }
+            }
+            res
+        };
+
+        if let Err(e) = result {
+            error!("Import failed: {}", e);
+        }
+    });
+
+    Ok(ImportStarted {
+        message: "Import started".to_string(),
+    })
 }
 
 #[cfg(test)]

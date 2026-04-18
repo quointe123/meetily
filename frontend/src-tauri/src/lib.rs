@@ -689,6 +689,8 @@ pub fn run() {
             audio::import::start_import_audio_command,
             audio::import::cancel_import_command,
             audio::import::is_import_in_progress_command,
+            audio::import::select_multiple_audio_files_command,
+            audio::import::start_import_multi_command,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
