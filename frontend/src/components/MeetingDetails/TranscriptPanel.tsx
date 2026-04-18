@@ -28,6 +28,11 @@ interface TranscriptPanelProps {
   meetingId?: string;
   meetingFolderPath?: string | null;
   onRefetchTranscripts?: () => Promise<void>;
+
+  // Search highlight props
+  searchTerm?: string | null;
+  activeMatchIndex?: number;
+  searchMatches?: { index: number; start: number; end: number }[];
 }
 
 export function TranscriptPanel({
@@ -48,6 +53,9 @@ export function TranscriptPanel({
   meetingId,
   meetingFolderPath,
   onRefetchTranscripts,
+  searchTerm,
+  activeMatchIndex,
+  searchMatches,
 }: TranscriptPanelProps) {
   // Convert transcripts to segments if pagination is not used but we want virtualization
   const convertedSegments = useMemo(() => {
@@ -94,6 +102,9 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          searchTerm={searchTerm}
+          activeMatchIndex={activeMatchIndex}
+          searchMatches={searchMatches}
         />
       </div>
 

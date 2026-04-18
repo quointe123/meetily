@@ -9,7 +9,6 @@ import { useRecordingState, RecordingStatus } from '@/contexts/RecordingStateCon
 import { useTranscripts } from '@/contexts/TranscriptContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { StatusOverlays } from '@/app/_components/StatusOverlays';
-import Analytics from '@/lib/analytics';
 import { SettingsModals } from './_components/SettingsModal';
 import { TranscriptPanel } from './_components/TranscriptPanel';
 import { useModalState } from '@/hooks/useModalState';
@@ -38,7 +37,7 @@ export default function Home() {
 
   // Hooks
   const { hasMicrophone } = usePermissionCheck();
-  const { setIsMeetingActive, isCollapsed: sidebarCollapsed, refetchMeetings } = useSidebar();
+  const { setIsMeetingActive, refetchMeetings } = useSidebar();
   const { modals, messages, showModal, hideModal } = useModalState(transcriptModelConfig);
   const { isRecordingDisabled, setIsRecordingDisabled } = useRecordingStateSync(isRecording, setIsRecordingState, setIsMeetingActive);
   const { handleRecordingStart } = useRecordingStart(isRecording, setIsRecordingState, showModal);
@@ -61,11 +60,6 @@ export default function Home() {
   } = useTranscriptRecovery();
 
   const router = useRouter();
-
-  useEffect(() => {
-    // Track page view
-    Analytics.trackPageView('home');
-  }, []);
 
   // Startup recovery check
   useEffect(() => {
@@ -227,7 +221,7 @@ export default function Home() {
               <div
                 className="flex justify-center pl-8 transition-[margin] duration-300"
                 style={{
-                  marginLeft: sidebarCollapsed ? '4rem' : '16rem'
+                  marginLeft: '4rem'
                 }}
               >
                 <div className="w-2/3 max-w-[750px] flex justify-center">
@@ -257,7 +251,6 @@ export default function Home() {
         <StatusOverlays
           isProcessing={status === RecordingStatus.PROCESSING_TRANSCRIPTS && !recordingState.isRecording}
           isSaving={status === RecordingStatus.SAVING}
-          sidebarCollapsed={sidebarCollapsed}
         />
       </div>
     </motion.div>

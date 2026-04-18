@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { Transcript, Summary } from "@/types";
 import PageContent from "./page-content";
 import { useRouter, useSearchParams } from "next/navigation";
-import Analytics from "@/lib/analytics";
 import { invoke } from "@tauri-apps/api/core";
 import { LoaderIcon } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
@@ -23,6 +22,10 @@ function MeetingDetailsContent() {
   const searchParams = useSearchParams();
   const meetingId = searchParams.get('id');
   const source = searchParams.get('source'); // Check if navigated from recording
+  const searchTerm = searchParams.get('search');
+  const searchTranscriptId = searchParams.get('transcript_id');
+  const highlightStart = searchParams.get('highlight_start') ? parseInt(searchParams.get('highlight_start')!) : undefined;
+  const highlightEnd = searchParams.get('highlight_end') ? parseInt(searchParams.get('highlight_end')!) : undefined;
   const { setCurrentMeeting, refetchMeetings, stopSummaryPolling } = useSidebar();
   const { isAutoSummary } = useConfig(); // Get auto-summary toggle state
   const router = useRouter();
@@ -188,7 +191,6 @@ function MeetingDetailsContent() {
       console.warn('No valid meeting ID in URL - meetingId:', meetingId);
       setError("No meeting selected");
       setIsLoading(false);
-      Analytics.trackPageView('meeting_details');
       return;
     }
 
@@ -377,6 +379,11 @@ function MeetingDetailsContent() {
     totalCount={totalCount}
     loadedCount={loadedCount}
     onLoadMore={loadMore}
+    // Search highlight props
+    searchTerm={searchTerm}
+    searchTranscriptId={searchTranscriptId}
+    highlightStart={highlightStart}
+    highlightEnd={highlightEnd}
   />;
 }
 

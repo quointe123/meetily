@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Summary, SummaryResponse } from '@/types';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { TranscriptPanel } from '@/components/MeetingDetails/TranscriptPanel';
+import { SearchBanner } from '@/components/MeetingDetails/SearchBanner';
 import { SummaryPanel } from '@/components/MeetingDetails/SummaryPanel';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 
@@ -31,6 +32,11 @@ export default function PageContent({
   totalCount,
   loadedCount,
   onLoadMore,
+  // Search highlight props
+  searchTerm,
+  searchTranscriptId,
+  highlightStart,
+  highlightEnd,
 }: {
   meeting: any;
   summaryData: Summary | null;
@@ -45,6 +51,11 @@ export default function PageContent({
   totalCount?: number;
   loadedCount?: number;
   onLoadMore?: () => void;
+  // Search highlight props
+  searchTerm?: string | null;
+  searchTranscriptId?: string | null;
+  highlightStart?: number;
+  highlightEnd?: number;
 }) {
   console.log('📄 PAGE CONTENT: Initializing with data:', {
     meetingId: meeting.id,
@@ -56,6 +67,10 @@ export default function PageContent({
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [isRecording] = useState(false);
   const [summaryResponse] = useState<SummaryResponse | null>(null);
+
+  // Search banner state
+  const [showSearchBanner, setShowSearchBanner] = useState(!!searchTerm);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
   // Ref to store the modal open function from SummaryGeneratorButtonGroup
   const openModelSettingsRef = useRef<(() => void) | null>(null);
@@ -69,6 +84,38 @@ export default function PageContent({
   // Custom hooks
   const meetingData = useMeetingData({ meeting, summaryData, onMeetingUpdated });
   const templates = useTemplates();
+
+  // Find all occurrences of searchTerm in loaded transcripts
+  const searchMatches = useMemo(() => {
+    if (!searchTerm || !showSearchBanner) return [];
+    const term = searchTerm.toLowerCase();
+    const allTranscripts = meetingData.transcripts;
+    const matches: { index: number; start: number; end: number }[] = [];
+
+    allTranscripts.forEach((t: { text?: string }, idx: number) => {
+      const text = (t.text || '').toLowerCase();
+      let pos = 0;
+      while ((pos = text.indexOf(term, pos)) !== -1) {
+        matches.push({ index: idx, start: pos, end: pos + term.length });
+        pos += term.length;
+      }
+    });
+
+    return matches;
+  }, [searchTerm, showSearchBanner, meetingData.transcripts]);
+
+  const handleCloseSearch = () => {
+    setShowSearchBanner(false);
+    // Clean up URL
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('search');
+      url.searchParams.delete('transcript_id');
+      url.searchParams.delete('highlight_start');
+      url.searchParams.delete('highlight_end');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   // Callback to register the modal open function
   const handleRegisterModalOpen = (openFn: () => void) => {
@@ -165,6 +212,16 @@ export default function PageContent({
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className="flex flex-col h-screen bg-gray-50"
     >
+      {showSearchBanner && searchTerm && (
+        <SearchBanner
+          searchTerm={searchTerm}
+          currentIndex={currentMatchIndex}
+          totalMatches={searchMatches.length}
+          onPrev={() => setCurrentMatchIndex(prev => Math.max(0, prev - 1))}
+          onNext={() => setCurrentMatchIndex(prev => Math.min(searchMatches.length - 1, prev + 1))}
+          onClose={handleCloseSearch}
+        />
+      )}
       <div className="flex flex-1 overflow-hidden">
         <TranscriptPanel
           transcripts={meetingData.transcripts}
@@ -186,6 +243,9 @@ export default function PageContent({
           meetingId={meeting.id}
           meetingFolderPath={meeting.folder_path}
           onRefetchTranscripts={onRefetchTranscripts}
+          searchTerm={showSearchBanner ? searchTerm : undefined}
+          activeMatchIndex={currentMatchIndex}
+          searchMatches={searchMatches}
         />
         <SummaryPanel
           meeting={meeting}

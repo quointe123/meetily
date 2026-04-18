@@ -34,6 +34,13 @@ export interface VirtualizedTranscriptViewProps {
     totalCount?: number;
     loadedCount?: number;
     onLoadMore?: () => void;
+
+    /** Search term to highlight in transcript text */
+    searchTerm?: string | null;
+    /** Index of the active match (for prev/next navigation) */
+    activeMatchIndex?: number;
+    /** All search matches with segment indices */
+    searchMatches?: { index: number; start: number; end: number }[];
 }
 
 // Threshold for enabling virtualization (below this, use simple rendering)
@@ -63,6 +70,20 @@ function cleanStopWords(text: string): string {
     return cleanedText.replace(/\s+/g, ' ').trim();
 }
 
+// Highlight search terms in text
+function highlightSearchTerm(text: string, searchTerm: string | null | undefined): React.ReactNode {
+    if (!searchTerm) return text;
+    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = text.split(regex);
+    if (parts.length === 1) return text;
+    return parts.map((part, i) =>
+        regex.test(part)
+            ? <mark key={i} className="bg-yellow-300 rounded px-0.5">{part}</mark>
+            : part
+    );
+}
+
 // Memoized transcript segment component
 const TranscriptSegment = memo(function TranscriptSegment({
     id,
@@ -71,6 +92,7 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence,
     isStreaming,
     showConfidence,
+    searchTerm,
 }: {
     id: string;
     timestamp: number;
@@ -78,8 +100,10 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence?: number;
     isStreaming: boolean;
     showConfidence: boolean;
+    searchTerm?: string | null;
 }) {
     const displayText = cleanStopWords(text) || (text.trim() === '' ? '[Silence]' : text);
+    const rendered = searchTerm ? highlightSearchTerm(displayText, searchTerm) : displayText;
 
     return (
         <div id={`segment-${id}`} className="mb-3">
@@ -99,10 +123,10 @@ const TranscriptSegment = memo(function TranscriptSegment({
                 <div className="flex-1">
                     {isStreaming ? (
                         <div className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
-                            <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+                            <p className="text-base text-gray-800 leading-relaxed">{rendered}</p>
                         </div>
                     ) : (
-                        <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+                        <p className="text-base text-gray-800 leading-relaxed">{rendered}</p>
                     )}
                 </div>
             </div>
@@ -124,6 +148,9 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
     totalCount = 0,
     loadedCount = 0,
     onLoadMore,
+    searchTerm,
+    activeMatchIndex = 0,
+    searchMatches = [],
 }) => {
     // Create scroll ref first - shared between virtualizer and auto-scroll hook
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -145,6 +172,34 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
             });
         },
     });
+
+    // Scroll to the active search match (initial load + prev/next navigation)
+    const prevMatchIndex = useRef<number>(-1);
+    useEffect(() => {
+        if (!searchTerm || segments.length === 0 || searchMatches.length === 0) return;
+
+        const match = searchMatches[activeMatchIndex];
+        if (!match) return;
+
+        // Skip if we already scrolled to this match
+        if (prevMatchIndex.current === activeMatchIndex && prevMatchIndex.current !== -1) return;
+        prevMatchIndex.current = activeMatchIndex;
+
+        const segmentIndex = match.index;
+
+        // Small delay to let virtualizer measure on initial load
+        const delay = prevMatchIndex.current <= 0 ? 300 : 50;
+        const timer = setTimeout(() => {
+            if (segments.length >= VIRTUALIZATION_THRESHOLD) {
+                virtualizer.scrollToIndex(segmentIndex, { align: 'center', behavior: 'smooth' });
+            } else {
+                const el = document.getElementById(`segment-${segments[segmentIndex]?.id}`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, delay);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm, segments, searchMatches, activeMatchIndex, virtualizer]);
 
     // Custom hook for auto-scrolling (supports both virtualized and non-virtualized)
     useAutoScroll({
@@ -296,6 +351,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         confidence={segment.confidence}
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
+                                        searchTerm={searchTerm}
                                     />
                                 </div>
                             );
@@ -352,6 +408,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         confidence={segment.confidence}
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
+                                        searchTerm={searchTerm}
                                     />
                                 </motion.div>
                             );

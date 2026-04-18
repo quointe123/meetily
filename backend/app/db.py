@@ -128,6 +128,23 @@ class DatabaseManager:
                 )
             """)
 
+            # Create transcript_embeddings table for semantic search
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS transcript_embeddings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meeting_id TEXT NOT NULL,
+                    transcript_id TEXT NOT NULL,
+                    chunk_text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_transcript_embeddings_meeting
+                ON transcript_embeddings(meeting_id)
+            """)
+
             # Create settings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
@@ -766,6 +783,93 @@ class DatabaseManager:
             row = await cursor.fetchone()
             return row[0] if row and row[0] else ""
 
+    async def index_transcript_embeddings(self, meeting_id: str):
+        """Compute and store embeddings for a meeting's transcripts via Ollama."""
+        import httpx
+        import numpy as np
+
+        try:
+            # Check if Ollama is available
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                try:
+                    resp = await client.get("http://localhost:11434/api/tags")
+                    if resp.status_code != 200:
+                        logger.info("Ollama not available, skipping embedding indexation")
+                        return
+                    # Check nomic-embed-text is available
+                    models = resp.json().get("models", [])
+                    if not any(m.get("name", "").startswith("nomic-embed-text") for m in models):
+                        logger.info("nomic-embed-text model not found, skipping embedding indexation")
+                        return
+                except Exception:
+                    logger.info("Ollama not available, skipping embedding indexation")
+                    return
+
+            async with self._get_connection() as conn:
+                # Get all transcripts for the meeting
+                cursor = await conn.execute(
+                    "SELECT id, transcript FROM transcripts WHERE meeting_id = ?",
+                    (meeting_id,)
+                )
+                rows = await cursor.fetchall()
+
+                if not rows:
+                    return
+
+                # Delete existing embeddings for this meeting
+                await conn.execute(
+                    "DELETE FROM transcript_embeddings WHERE meeting_id = ?",
+                    (meeting_id,)
+                )
+
+                # Chunk and embed each transcript
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    for transcript_id, text in rows:
+                        chunks = self._chunk_text(text, chunk_size=800, overlap=200)
+
+                        for chunk in chunks:
+                            if not chunk.strip():
+                                continue
+
+                            try:
+                                resp = await client.post(
+                                    "http://localhost:11434/api/embed",
+                                    json={"model": "nomic-embed-text", "input": chunk},
+                                )
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    embeddings = data.get("embeddings", [])
+                                    if embeddings:
+                                        embedding_bytes = np.array(embeddings[0], dtype=np.float32).tobytes()
+                                        await conn.execute(
+                                            "INSERT INTO transcript_embeddings (meeting_id, transcript_id, chunk_text, embedding) VALUES (?, ?, ?, ?)",
+                                            (meeting_id, transcript_id, chunk, embedding_bytes),
+                                        )
+                            except Exception as e:
+                                logger.warning(f"Failed to embed chunk for transcript {transcript_id}: {e}")
+                                continue
+
+                await conn.commit()
+                logger.info(f"Indexed embeddings for meeting {meeting_id}")
+
+        except Exception as e:
+            logger.error(f"Error indexing embeddings for meeting {meeting_id}: {e}")
+
+    @staticmethod
+    def _chunk_text(text: str, chunk_size: int = 800, overlap: int = 200) -> list:
+        """Split text into overlapping chunks."""
+        if len(text) <= chunk_size:
+            return [text]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            chunks.append(text[start:end])
+            start += chunk_size - overlap
+
+        return chunks
+
     async def search_transcripts(self, query: str):
         """Search through meeting transcripts for the given query"""
         if not query or query.strip() == "":
@@ -859,7 +963,52 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error searching transcripts: {str(e)}")
             raise
-        
+
+    async def get_meetings_with_details(self):
+        """Get all meetings with created_at, duration, and summary preview for card display"""
+        try:
+            async with self._get_connection() as conn:
+                cursor = await conn.execute("""
+                    SELECT
+                        m.id,
+                        m.title,
+                        m.created_at,
+                        (SELECT MAX(COALESCE(t.audio_end_time, 0)) FROM transcripts t WHERE t.meeting_id = m.id) as duration_seconds,
+                        (SELECT sp.result FROM summary_processes sp WHERE sp.meeting_id = m.id AND sp.status = 'completed' LIMIT 1) as summary_result
+                    FROM meetings m
+                    ORDER BY m.created_at DESC
+                """)
+                rows = await cursor.fetchall()
+
+                results = []
+                for row in rows:
+                    meeting_id, title, created_at, duration_seconds, summary_result = row
+
+                    summary_preview = None
+                    if summary_result:
+                        try:
+                            summary_data = json.loads(summary_result) if isinstance(summary_result, str) else summary_result
+                            if isinstance(summary_data, dict):
+                                md = summary_data.get('markdown', '')
+                                if md:
+                                    lines = [l.strip() for l in md.split('\n') if l.strip() and not l.strip().startswith('#')]
+                                    summary_preview = ' '.join(lines)[:150]
+                        except (json.JSONDecodeError, AttributeError):
+                            pass
+
+                    results.append({
+                        'id': meeting_id,
+                        'title': title,
+                        'created_at': created_at or '',
+                        'duration_seconds': duration_seconds,
+                        'summary_preview': summary_preview,
+                    })
+
+                return results
+        except Exception as e:
+            logger.error(f"Error getting meetings with details: {str(e)}")
+            raise
+
     async def delete_api_key(self, provider: str):
         """Delete the API key"""
         provider_list = ["openai", "claude", "groq", "ollama"]

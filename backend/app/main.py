@@ -7,6 +7,7 @@ from typing import Optional, List
 import logging
 from dotenv import load_dotenv
 from db import DatabaseManager
+from search import HybridSearchOrchestrator
 import json
 from threading import Lock
 from transcript_processor import TranscriptProcessor
@@ -52,6 +53,9 @@ app.add_middleware(
 
 # Global database manager instance for meeting management endpoints
 db = DatabaseManager()
+
+# Global hybrid search orchestrator
+search_orchestrator = HybridSearchOrchestrator()
 
 # New Pydantic models for meeting management
 class Transcript(BaseModel):
@@ -509,7 +513,7 @@ async def get_summary(meeting_id: str):
         )
 
 @app.post("/save-transcript")
-async def save_transcript(request: SaveTranscriptRequest):
+async def save_transcript(request: SaveTranscriptRequest, background_tasks: BackgroundTasks):
     """Save transcript segments for a meeting without processing"""
     try:
         logger.info(f"Received save-transcript request for meeting: {request.meeting_title}")
@@ -540,6 +544,9 @@ async def save_transcript(request: SaveTranscriptRequest):
                 audio_end_time=transcript.audio_end_time,
                 duration=transcript.duration
             )
+
+        # Index embeddings in background (gracefully skipped if Ollama unavailable)
+        background_tasks.add_task(db.index_transcript_embeddings, meeting_id)
 
         logger.info("Transcripts saved successfully")
         return {"status": "success", "message": "Transcript saved successfully", "meeting_id": meeting_id}
@@ -617,17 +624,68 @@ async def save_meeting_summary(data: MeetingSummaryUpdate):
         logger.error(f"Error saving meeting summary: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-class SearchRequest(BaseModel):
-    query: str
-
-@app.post("/search-transcripts")
-async def search_transcripts(request: SearchRequest):
-    """Search through meeting transcripts for the given query"""
+@app.get("/get-meetings-cards")
+async def get_meetings_cards():
+    """Get all meetings with card display data (duration, summary preview)"""
     try:
-        results = await db.search_transcripts(request.query)
+        results = await db.get_meetings_with_details()
         return JSONResponse(content=results)
     except Exception as e:
-        logger.error(f"Error searching transcripts: {str(e)}")
+        logger.error(f"Error getting meetings cards: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SearchMeetingsRequest(BaseModel):
+    query: str
+    limit: int = 20
+
+@app.post("/search-meetings")
+async def search_meetings(request: SearchMeetingsRequest):
+    """Hybrid search across meeting transcripts (fuzzy + TF-IDF + semantic)"""
+    try:
+        async with db._get_connection() as conn:
+            cursor = await conn.execute("""
+                SELECT t.id, t.meeting_id, m.title, t.transcript, t.timestamp
+                FROM transcripts t
+                JOIN meetings m ON m.id = t.meeting_id
+            """)
+            rows = await cursor.fetchall()
+
+            transcripts = [
+                {
+                    "transcript_id": row[0],
+                    "meeting_id": row[1],
+                    "title": row[2],
+                    "text": row[3],
+                    "timestamp": row[4],
+                }
+                for row in rows
+            ]
+
+            emb_cursor = await conn.execute("""
+                SELECT meeting_id, transcript_id, chunk_text, embedding
+                FROM transcript_embeddings
+            """)
+            emb_rows = await emb_cursor.fetchall()
+
+            stored_embeddings = [
+                {
+                    "meeting_id": row[0],
+                    "transcript_id": row[1],
+                    "chunk_text": row[2],
+                    "embedding": row[3],
+                }
+                for row in emb_rows
+            ]
+
+        results = await search_orchestrator.search(
+            query=request.query,
+            transcripts=transcripts,
+            stored_embeddings=stored_embeddings,
+            limit=request.limit,
+        )
+        return JSONResponse(content=results)
+    except Exception as e:
+        logger.error(f"Error in hybrid search: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.on_event("shutdown")

@@ -1,7 +1,7 @@
-use crate::api::{MeetingDetails, MeetingTranscript};
+use crate::api::{MeetingCardData, MeetingDetails, MeetingTranscript};
 use crate::database::models::{MeetingModel, Transcript};
 use chrono::Utc;
-use sqlx::{Connection, Error as SqlxError, SqliteConnection, SqlitePool};
+use sqlx::{Connection, Error as SqlxError, Row, SqliteConnection, SqlitePool};
 use tracing::{error, info};
 
 pub struct MeetingsRepository;
@@ -13,6 +13,63 @@ impl MeetingsRepository {
                 .fetch_all(pool)
                 .await?;
         Ok(meetings)
+    }
+
+    pub async fn get_meetings_with_details(
+        pool: &SqlitePool,
+    ) -> Result<Vec<MeetingCardData>, SqlxError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                m.id,
+                m.title,
+                m.created_at,
+                (SELECT MAX(COALESCE(t.audio_end_time, 0)) FROM transcripts t WHERE t.meeting_id = m.id) as duration_seconds,
+                (SELECT sp.result FROM summary_processes sp WHERE sp.meeting_id = m.id AND sp.status = 'completed' LIMIT 1) as summary_result
+            FROM meetings m
+            ORDER BY m.created_at DESC
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id: String = row.get("id");
+            let title: String = row.get("title");
+            let created_at_str: String = row
+                .try_get::<String, _>("created_at")
+                .unwrap_or_default();
+            let duration_seconds: Option<f64> = row.try_get("duration_seconds").ok();
+            let summary_result: Option<String> = row.try_get("summary_result").ok().flatten();
+
+            let summary_preview = summary_result.and_then(|result_str| {
+                let parsed: serde_json::Value = serde_json::from_str(&result_str).ok()?;
+                let md = parsed.get("markdown")?.as_str()?;
+                let lines: Vec<&str> = md
+                    .lines()
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                    .collect();
+                let joined = lines.join(" ");
+                if joined.is_empty() {
+                    None
+                } else {
+                    // Take first 150 chars respecting char boundaries
+                    Some(joined.chars().take(150).collect())
+                }
+            });
+
+            results.push(MeetingCardData {
+                id,
+                title,
+                created_at: created_at_str,
+                duration_seconds,
+                summary_preview,
+            });
+        }
+
+        Ok(results)
     }
 
     pub async fn delete_meeting(pool: &SqlitePool, meeting_id: &str) -> Result<bool, SqlxError> {

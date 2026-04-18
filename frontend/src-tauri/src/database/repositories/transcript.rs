@@ -1,6 +1,7 @@
-use crate::api::{TranscriptSearchResult, TranscriptSegment};
+use crate::api::{SearchMatch, SearchMeetingResult, TranscriptSearchResult, TranscriptSegment};
 use chrono::Utc;
 use sqlx::{Connection, Error as SqlxError, SqlitePool};
+use std::collections::HashMap;
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -117,6 +118,80 @@ impl TranscriptsRepository {
             })
             .collect();
 
+        Ok(results)
+    }
+
+    /// Searches transcripts and returns results grouped by meeting in SearchMeetingResult format.
+    /// This is the local fallback when the Python backend is unavailable.
+    pub async fn search_meetings(
+        pool: &SqlitePool,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<SearchMeetingResult>, SqlxError> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let search_query = format!("%{}%", query.to_lowercase());
+
+        let rows = sqlx::query_as::<_, (String, String, String, String, String)>(
+            "SELECT m.id, m.title, t.id, t.transcript, t.timestamp
+             FROM meetings m
+             JOIN transcripts t ON m.id = t.meeting_id
+             WHERE LOWER(t.transcript) LIKE ?
+             ORDER BY m.created_at DESC",
+        )
+        .bind(&search_query)
+        .fetch_all(pool)
+        .await?;
+
+        // Group by meeting
+        let mut meetings_map: HashMap<String, SearchMeetingResult> = HashMap::new();
+        let query_lower = query.to_lowercase();
+
+        for (meeting_id, title, transcript_id, transcript, timestamp) in rows {
+            let transcript_lower = transcript.to_lowercase();
+            let (highlight_start, highlight_end) = match transcript_lower.find(&query_lower) {
+                Some(idx) => (idx, idx + query.len()),
+                None => (0, 0),
+            };
+
+            // Build snippet around the match
+            let start = highlight_start.saturating_sub(50);
+            let end = (highlight_end + 50).min(transcript.len());
+            let text = if start > 0 || end < transcript.len() {
+                let mut s = String::new();
+                if start > 0 { s.push_str("..."); }
+                s.push_str(&transcript[start..end]);
+                if end < transcript.len() { s.push_str("..."); }
+                s
+            } else {
+                transcript.clone()
+            };
+
+            let search_match = SearchMatch {
+                transcript_id,
+                text,
+                timestamp,
+                highlight_start,
+                highlight_end,
+                match_type: "exact".to_string(),
+            };
+
+            meetings_map
+                .entry(meeting_id.clone())
+                .or_insert_with(|| SearchMeetingResult {
+                    meeting_id,
+                    title,
+                    score: 1.0,
+                    matches: Vec::new(),
+                })
+                .matches
+                .push(search_match);
+        }
+
+        let mut results: Vec<SearchMeetingResult> = meetings_map.into_values().collect();
+        results.truncate(limit as usize);
         Ok(results)
     }
 
