@@ -980,7 +980,7 @@ pub async fn validate_audio_file_command(path: String) -> Result<AudioFileInfo, 
     validate_audio_file(Path::new(&path)).map_err(|e| e.to_string())
 }
 
-/// Start importing an audio file (Beta gated using configContext.betaFeatures)
+/// Start importing an audio file (single-file path, kept for retranscribe dialog compatibility)
 #[tauri::command]
 pub async fn start_import_audio_command<R: Runtime>(
     app: AppHandle<R>,
@@ -1030,7 +1030,6 @@ pub async fn is_import_in_progress_command() -> bool {
 pub async fn select_multiple_audio_files_command<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<Vec<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     let app_clone = app.clone();
     let paths = tokio::task::spawn_blocking(move || {
         app_clone
@@ -1067,6 +1066,10 @@ pub async fn start_import_multi_command<R: Runtime>(
     }
     if parts.is_empty() {
         return Err("No files provided".to_string());
+    }
+    const MAX_IMPORT_FILES: usize = 4;
+    if parts.len() > MAX_IMPORT_FILES {
+        return Err(format!("Too many files: max {} allowed", MAX_IMPORT_FILES));
     }
 
     // Sort by order field (frontend should already send them sorted)
