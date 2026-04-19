@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
   Upload, Clock, HardDrive, ArrowUp, ArrowDown, X, Loader2,
-  AlertCircle, Globe, Cpu, Plus, Trash2, Check, ArrowRight,
+  AlertCircle, Globe, Cpu, Trash2, Check, ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -444,12 +444,220 @@ export default function ImportPage() {
     );
   }
 
+  // ─── Shared subviews ───────────────────────────────────────────────────────
+  const hasFiles = files.length > 0;
+
+  const dropZone = canAddMore && (
+    <div
+      onClick={handleBrowse}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleBrowse();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="Ajouter des fichiers audio"
+      className={`group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-white text-center transition-[border-color,background-color] duration-200 ease-out hover:border-amber-400 hover:bg-amber-50/30 focus-visible:border-amber-400 focus-visible:bg-amber-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 ${
+        hasFiles ? 'px-5 py-5' : 'px-6 py-10'
+      }`}
+    >
+      <WaveformGlyph
+        className={`w-auto text-gray-300 transition-colors duration-200 group-hover:text-amber-500 ${
+          hasFiles ? 'h-5' : 'h-8'
+        }`}
+      />
+      <div>
+        <p className={`font-medium text-gray-800 ${hasFiles ? 'text-[13px]' : 'text-[14px]'}`}>
+          {hasFiles ? 'Ajouter un autre fichier' : 'Glissez vos fichiers ici'}
+        </p>
+        <p className={`mt-0.5 text-gray-500 ${hasFiles ? 'text-[11px]' : 'text-[12px]'}`}>
+          {hasFiles ? (
+            <>Glissez-déposez ou <span className="font-semibold text-amber-700 underline-offset-2 group-hover:underline">parcourez</span></>
+          ) : (
+            <>ou <span className="font-semibold text-amber-700 underline-offset-2 group-hover:underline">parcourez votre disque</span></>
+          )}
+        </p>
+      </div>
+      {!hasFiles && (
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+          {AUDIO_EXTENSIONS.map(ext => (
+            <span
+              key={ext}
+              className="rounded-sm bg-gray-100 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-gray-500"
+            >
+              {AUDIO_FORMAT_DISPLAY_NAMES[ext]}
+            </span>
+          ))}
+          <span className="ml-1 text-[10.5px] text-gray-400 tabular-nums">
+            {files.length}/{MAX_FILES}
+          </span>
+        </div>
+      )}
+      {hasFiles && (
+        <span className="absolute right-3 top-2 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-gray-400 tabular-nums">
+          {files.length}/{MAX_FILES}
+        </span>
+      )}
+    </div>
+  );
+
+  const fileQueue = hasFiles && (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+          Fichiers sélectionnés
+        </h2>
+        {totalDurationSecs > 0 && (
+          <span className="text-[11px] tabular-nums text-gray-500">
+            Durée totale :{' '}
+            <span className="font-semibold text-gray-700">
+              {formatDurationHuman(totalDurationSecs)}
+            </span>
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        {files.map((part, idx) => (
+          <FileRow
+            key={part.id}
+            part={part}
+            index={idx}
+            total={files.length}
+            onMoveUp={() => moveUp(part.id)}
+            onMoveDown={() => moveDown(part.id)}
+            onRemove={() => removeFile(part.id)}
+            disabled={false}
+          />
+        ))}
+      </div>
+
+      <div className="mt-2.5 flex items-center justify-end text-[11.5px]">
+        <button
+          type="button"
+          onClick={handleReset}
+          className="inline-flex items-center gap-1 font-medium text-gray-500 transition-colors hover:text-red-600"
+        >
+          <Trash2 className="h-3 w-3" />
+          Tout effacer
+        </button>
+      </div>
+    </section>
+  );
+
+  const configForm = hasFiles && (
+    <div className="space-y-6">
+      {/* Title */}
+      <div>
+        <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+          Titre
+        </label>
+        <div
+          className={`mt-2 rounded-lg bg-white transition-[box-shadow,border-color] duration-200 ease-out ${
+            isTitleFocused
+              ? 'shadow-[0_0_0_3px_rgb(251_191_36/0.18)] ring-1 ring-amber-400'
+              : 'ring-1 ring-gray-200 hover:ring-gray-300'
+          }`}
+        >
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setTitleModifiedByUser(true);
+            }}
+            onFocus={() => setIsTitleFocused(true)}
+            onBlur={() => setIsTitleFocused(false)}
+            placeholder="Titre du meeting"
+            className="w-full rounded-lg bg-transparent px-3.5 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-400 focus:outline-none"
+          />
+        </div>
+        <p className="mt-1.5 text-[11px] text-gray-400">
+          Par défaut : le nom du premier fichier.
+        </p>
+      </div>
+
+      {/* Options — stacked vertically inside the narrow right column */}
+      <div>
+        <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+          Transcription
+        </h2>
+        <div className="mt-2 space-y-2.5">
+          {/* Language */}
+          <div className="rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
+                Langue
+              </span>
+            </div>
+            {isParakeetModel ? (
+              <p className="text-[12.5px] text-gray-500">
+                Détection automatique (Parakeet)
+              </p>
+            ) : (
+              <Select value={selectedLang} onValueChange={setSelectedLang}>
+                <SelectTrigger className="h-8 border-0 bg-transparent px-0 text-[13px] font-medium text-gray-800 shadow-none focus:ring-0 focus:ring-offset-0">
+                  <SelectValue placeholder="Auto">{selectedLangLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {LANGUAGES.map(lang => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {/* Model */}
+          <div className="rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <Cpu className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
+                Modèle
+              </span>
+            </div>
+            {availableModels.length === 0 && !loadingModels ? (
+              <p className="text-[12.5px] text-gray-400">Aucun modèle disponible</p>
+            ) : (
+              <Select
+                value={selectedModelKey}
+                onValueChange={setSelectedModelKey}
+                disabled={loadingModels}
+              >
+                <SelectTrigger className="h-8 border-0 bg-transparent px-0 text-[13px] font-medium text-gray-800 shadow-none focus:ring-0 focus:ring-offset-0">
+                  <SelectValue placeholder={loadingModels ? 'Chargement…' : 'Sélectionner'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModels.map(m => (
+                    <SelectItem key={`${m.provider}:${m.name}`} value={`${m.provider}:${m.name}`}>
+                      <span className="flex items-center gap-2">
+                        <span>{m.displayName}</span>
+                        <span className="text-[10px] text-gray-400 tabular-nums">
+                          {Math.round(m.size_mb)} MB
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   // ─── Idle view ─────────────────────────────────────────────────────────────
   return (
     <>
       {isDragging && <DropOverlay />}
 
-      <div className="mx-auto max-w-xl px-6 py-10 sm:py-14">
+      <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14">
         {/* Header */}
         <header className="mb-8 flex items-start gap-3">
           <span aria-hidden className="mt-1 h-8 w-[2px] rounded-full bg-amber-400" />
@@ -467,235 +675,55 @@ export default function ImportPage() {
           </div>
         </header>
 
-        {/* Drop zone — only when we can still add files */}
-        {canAddMore && (
-          <div
-            onClick={handleBrowse}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleBrowse();
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            className="group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-white px-6 py-10 text-center transition-[border-color,background-color,transform] duration-200 ease-out hover:border-amber-400 hover:bg-amber-50/30 focus-visible:border-amber-400 focus-visible:bg-amber-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
-          >
-            <WaveformGlyph className="h-8 w-auto text-gray-300 transition-colors duration-200 group-hover:text-amber-500" />
-            <div>
-              <p className="text-[14px] font-medium text-gray-800">
-                Glissez vos fichiers ici
-              </p>
-              <p className="mt-0.5 text-[12px] text-gray-500">
-                ou <span className="font-semibold text-amber-700 underline-offset-2 group-hover:underline">parcourez votre disque</span>
-              </p>
+        {!hasFiles ? (
+          // Empty state: drop zone centered, tighter container so the zone doesn't sprawl
+          <div className="mx-auto max-w-xl">{dropZone}</div>
+        ) : (
+          // Files-added state: two columns on lg+, stacked on narrower screens
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10">
+            {/* Left column: drop zone (compact) + file queue */}
+            <div className="space-y-4">
+              {dropZone}
+              {fileQueue}
             </div>
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
-              {AUDIO_EXTENSIONS.map(ext => (
-                <span
-                  key={ext}
-                  className="rounded-sm bg-gray-100 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-gray-500"
-                >
-                  {AUDIO_FORMAT_DISPLAY_NAMES[ext]}
-                </span>
-              ))}
-              <span className="ml-1 text-[10.5px] text-gray-400 tabular-nums">
-                {files.length}/{MAX_FILES}
-              </span>
+
+            {/* Right column: title + options (sticky on lg so it stays in view) */}
+            <div className="lg:sticky lg:top-6 lg:self-start">
+              {configForm}
             </div>
           </div>
         )}
 
-        {/* File queue */}
-        {files.length > 0 && (
-          <section className="mt-6">
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
-                Fichiers sélectionnés
-              </h2>
-              {totalDurationSecs > 0 && (
-                <span className="text-[11px] tabular-nums text-gray-500">
-                  Durée totale :{' '}
-                  <span className="font-semibold text-gray-700">
-                    {formatDurationHuman(totalDurationSecs)}
-                  </span>
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              {files.map((part, idx) => (
-                <FileRow
-                  key={part.id}
-                  part={part}
-                  index={idx}
-                  total={files.length}
-                  onMoveUp={() => moveUp(part.id)}
-                  onMoveDown={() => moveDown(part.id)}
-                  onRemove={() => removeFile(part.id)}
-                  disabled={false}
-                />
-              ))}
-            </div>
-
-            <div className="mt-2.5 flex items-center justify-between text-[11.5px]">
-              {canAddMore ? (
-                <button
-                  type="button"
-                  onClick={handleBrowse}
-                  className="inline-flex items-center gap-1 font-medium text-amber-700 transition-colors hover:text-amber-800"
-                >
-                  <Plus className="h-3 w-3" />
-                  Ajouter un fichier
-                </button>
+        {/* Action bar — always at the bottom, spans full width */}
+        {hasFiles && (
+          <div className="mt-8 flex flex-col items-stretch gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <p className="text-[11.5px] text-gray-500 sm:flex-1">
+              {hasValidFiles ? (
+                <>
+                  <Check className="mr-1 inline h-3 w-3 text-amber-600" strokeWidth={3} />
+                  {validFiles.length} fichier{validFiles.length > 1 ? 's' : ''} prêt
+                  {validFiles.length > 1 ? 's' : ''}
+                  {totalDurationSecs > 0 && (
+                    <span className="text-gray-400">
+                      {' · '}
+                      {formatDurationHuman(totalDurationSecs)}
+                    </span>
+                  )}
+                </>
               ) : (
-                <span className="text-gray-400">Limite atteinte ({MAX_FILES}/{MAX_FILES})</span>
+                'Ajoutez au moins un fichier valide pour continuer'
               )}
-              <button
-                type="button"
-                onClick={handleReset}
-                className="inline-flex items-center gap-1 font-medium text-gray-500 transition-colors hover:text-red-600"
-              >
-                <Trash2 className="h-3 w-3" />
-                Tout effacer
-              </button>
-            </div>
-          </section>
+            </p>
+            <Button
+              onClick={handleImport}
+              disabled={!hasValidFiles}
+              className="gap-1.5 bg-amber-500 text-white shadow-[0_2px_8px_-2px_rgb(251_191_36/0.5)] transition-[background-color,transform,box-shadow] hover:bg-amber-600 hover:shadow-[0_4px_12px_-2px_rgb(251_191_36/0.5)] active:translate-y-[0.5px] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+            >
+              Lancer l'import
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+            </Button>
+          </div>
         )}
-
-        {/* Title + Options */}
-        {hasValidFiles && (
-          <section className="mt-8 space-y-6">
-            {/* Title */}
-            <div>
-              <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
-                Titre
-              </label>
-              <div
-                className={`mt-2 rounded-lg bg-white transition-[box-shadow,border-color] duration-200 ease-out ${
-                  isTitleFocused
-                    ? 'shadow-[0_0_0_3px_rgb(251_191_36/0.18)] ring-1 ring-amber-400'
-                    : 'ring-1 ring-gray-200 hover:ring-gray-300'
-                }`}
-              >
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setTitleModifiedByUser(true);
-                  }}
-                  onFocus={() => setIsTitleFocused(true)}
-                  onBlur={() => setIsTitleFocused(false)}
-                  placeholder="Titre du meeting"
-                  className="w-full rounded-lg bg-transparent px-3.5 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-400 focus:outline-none"
-                />
-              </div>
-              <p className="mt-1.5 text-[11px] text-gray-400">
-                Par défaut : le nom du premier fichier.
-              </p>
-            </div>
-
-            {/* Options row */}
-            <div>
-              <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-gray-500">
-                Transcription
-              </h2>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                {/* Language */}
-                <div className="rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300">
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden />
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
-                      Langue
-                    </span>
-                  </div>
-                  {isParakeetModel ? (
-                    <p className="text-[12.5px] text-gray-500">
-                      Détection automatique (Parakeet)
-                    </p>
-                  ) : (
-                    <Select value={selectedLang} onValueChange={setSelectedLang}>
-                      <SelectTrigger className="h-8 border-0 bg-transparent px-0 text-[13px] font-medium text-gray-800 shadow-none focus:ring-0 focus:ring-offset-0">
-                        <SelectValue placeholder="Auto">{selectedLangLabel}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {LANGUAGES.map(lang => (
-                          <SelectItem key={lang.code} value={lang.code}>
-                            {lang.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                {/* Model */}
-                <div className="rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300">
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <Cpu className="h-3.5 w-3.5 text-gray-500" strokeWidth={2} aria-hidden />
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
-                      Modèle
-                    </span>
-                  </div>
-                  {availableModels.length === 0 && !loadingModels ? (
-                    <p className="text-[12.5px] text-gray-400">Aucun modèle disponible</p>
-                  ) : (
-                    <Select
-                      value={selectedModelKey}
-                      onValueChange={setSelectedModelKey}
-                      disabled={loadingModels}
-                    >
-                      <SelectTrigger className="h-8 border-0 bg-transparent px-0 text-[13px] font-medium text-gray-800 shadow-none focus:ring-0 focus:ring-offset-0">
-                        <SelectValue placeholder={loadingModels ? 'Chargement…' : 'Sélectionner'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map(m => (
-                          <SelectItem key={`${m.provider}:${m.name}`} value={`${m.provider}:${m.name}`}>
-                            <span className="flex items-center gap-2">
-                              <span>{m.displayName}</span>
-                              <span className="text-[10px] text-gray-400 tabular-nums">
-                                {Math.round(m.size_mb)} MB
-                              </span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Action bar */}
-        <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
-          <p className="text-[11.5px] text-gray-500">
-            {hasValidFiles ? (
-              <>
-                <Check className="mr-1 inline h-3 w-3 text-amber-600" strokeWidth={3} />
-                {validFiles.length} fichier{validFiles.length > 1 ? 's' : ''} prêt
-                {validFiles.length > 1 ? 's' : ''}{' '}
-                {totalDurationSecs > 0 && (
-                  <span className="text-gray-400">
-                    · {formatDurationHuman(totalDurationSecs)}
-                  </span>
-                )}
-              </>
-            ) : (
-              'Ajoutez au moins un fichier pour continuer'
-            )}
-          </p>
-          <Button
-            onClick={handleImport}
-            disabled={!hasValidFiles}
-            className="gap-1.5 bg-amber-500 text-white shadow-[0_2px_8px_-2px_rgb(251_191_36/0.5)] transition-[background-color,transform,box-shadow] hover:bg-amber-600 hover:shadow-[0_4px_12px_-2px_rgb(251_191_36/0.5)] active:translate-y-[0.5px] disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
-          >
-            Lancer l'import
-            <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-          </Button>
-        </div>
       </div>
     </>
   );
