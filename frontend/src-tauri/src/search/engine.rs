@@ -15,6 +15,11 @@ pub const SEMANTIC_CANDIDATES: usize = 50;
 /// With per-token scoring this stays well under 100 ms even on 10k chunks.
 pub const FUZZY_MAX_SCAN: usize = 5000;
 pub const DEFAULT_LIMIT: usize = 20;
+/// Below this top-hit score, every result is semantic noise (single-ranker hit at
+/// low rank). Calibrated from RRF math: 1/60 × max source multiplier (1.3) ≈ 0.022,
+/// so 0.025 keeps all multi-ranker hits and drops out-of-corpus queries like
+/// "photosynthesis" that otherwise return 5 unrelated titles.
+pub const MIN_TOP_SCORE: f32 = 0.025;
 
 pub struct HybridSearchEngine {
     pub pool: SqlitePool,
@@ -87,6 +92,11 @@ impl HybridSearchEngine {
             })
             .collect();
         hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        // If even the best hit is below the noise floor, the query has no real match.
+        // Prefer an empty result set to a handful of misleading single-ranker hits.
+        if hits.first().map_or(true, |h| h.score < MIN_TOP_SCORE) {
+            return Ok(Vec::new());
+        }
         hits.truncate(limit);
         Ok(hits)
     }

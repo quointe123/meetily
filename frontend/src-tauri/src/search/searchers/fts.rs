@@ -39,13 +39,19 @@ fn is_stopword(token: &str) -> bool {
 }
 
 /// Escape a user query for FTS5 MATCH:
+/// - split on non-alphanumeric (matching how FTS5's `unicode61` tokenizer behaves
+///   on the indexed side). This strips quotes, parens, hyphens, etc. so queries
+///   like `"pricing"` or `marché-client` produce valid MATCH expressions.
 /// - drop stopwords so common words ("et", "the") don't dilute the signal
 /// - wrap each remaining token in double quotes to disable operator parsing
 /// - append `*` to the last token for prefix match
 /// - join with explicit `OR` so BM25 naturally ranks chunks that match rarer tokens
 ///   (proper nouns, topic words) above chunks that match only common tokens
 pub fn escape_fts_query(query: &str) -> String {
-    let all_tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
+    let all_tokens: Vec<&str> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .collect();
     if all_tokens.is_empty() {
         return String::new();
     }
@@ -55,6 +61,8 @@ pub fn escape_fts_query(query: &str) -> String {
     let filtered: Vec<&str> = all_tokens.iter().copied().filter(|t| !is_stopword(t)).collect();
     let tokens: Vec<&str> = if filtered.is_empty() { all_tokens } else { filtered };
 
+    // Tokens are pure alphanumeric after splitting, so the replace is defensive
+    // rather than strictly needed — keep it in case future changes loosen the split.
     let mut parts: Vec<String> = tokens
         .iter()
         .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
@@ -117,7 +125,29 @@ mod tests {
 
     #[test]
     fn escape_escapes_embedded_double_quotes() {
-        assert_eq!(escape_fts_query("say \"hi\""), "\"say\" OR \"\"\"hi\"\"\"*");
+        // Quotes now get stripped during tokenization rather than escaped into the MATCH
+        // expression. Either behavior keeps us safe from FTS5 syntax errors; this one
+        // also produces a query that actually matches chunks.
+        assert_eq!(escape_fts_query("say \"hi\""), "\"say\" OR \"hi\"*");
+    }
+
+    #[test]
+    fn special_chars_are_stripped_not_escaped() {
+        // Before this change, "\"pricing\"" produced a malformed MATCH that
+        // silently matched nothing. Now it yields a clean token.
+        assert_eq!(escape_fts_query("\"pricing\""), "\"pricing\"*");
+        assert_eq!(escape_fts_query("(décisions)"), "\"décisions\"*");
+        // Hyphenated queries split like FTS5 would on the indexed side.
+        assert_eq!(escape_fts_query("marché-client"), "\"marché\" OR \"client\"*");
+        // Trailing punctuation no longer leaks into the token.
+        assert_eq!(escape_fts_query("amazon?"), "\"amazon\"*");
+    }
+
+    #[test]
+    fn apostrophe_contractions_split_into_stopword_plus_content_word() {
+        // "l'équipe" → tokens (l, équipe). "l" is a stopword → dropped. Left with "équipe".
+        assert_eq!(escape_fts_query("l'équipe"), "\"équipe\"*");
+        assert_eq!(escape_fts_query("d'accord"), "\"accord\"*");
     }
 
     #[test]
