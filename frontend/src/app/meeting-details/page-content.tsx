@@ -12,6 +12,8 @@ import { ModelConfig } from '@/components/ModelSettingsModal';
 
 // Custom hooks
 import { useMeetingData } from '@/hooks/meeting-details/useMeetingData';
+import { findMatchSpans } from '@/lib/fuzzyMatch';
+import { filterStopwords } from '@/lib/searchStopwords';
 import { useSummaryGeneration } from '@/hooks/meeting-details/useSummaryGeneration';
 import { useTemplates } from '@/hooks/meeting-details/useTemplates';
 import { useCopyOperations } from '@/hooks/meeting-details/useCopyOperations';
@@ -85,22 +87,21 @@ export default function PageContent({
   const meetingData = useMeetingData({ meeting, summaryData, onMeetingUpdated });
   const templates = useTemplates();
 
-  // Find all occurrences of searchTerm in loaded transcripts
+  // Find all occurrences of searchTerm in loaded transcripts. Uses word-level
+  // fuzzy matching so typo queries ("amaon") still highlight the real word
+  // ("amazon") in the transcript pane instead of silently finding nothing.
   const searchMatches = useMemo(() => {
     if (!searchTerm || !showSearchBanner) return [];
-    const term = searchTerm.toLowerCase();
+    const terms = filterStopwords(searchTerm.split(/\s+/));
+    if (terms.length === 0) return [];
     const allTranscripts = meetingData.transcripts;
     const matches: { index: number; start: number; end: number }[] = [];
-
     allTranscripts.forEach((t: { text?: string }, idx: number) => {
-      const text = (t.text || '').toLowerCase();
-      let pos = 0;
-      while ((pos = text.indexOf(term, pos)) !== -1) {
-        matches.push({ index: idx, start: pos, end: pos + term.length });
-        pos += term.length;
+      const text = t.text || '';
+      for (const span of findMatchSpans(text, terms)) {
+        matches.push({ index: idx, start: span.start, end: span.end });
       }
     });
-
     return matches;
   }, [searchTerm, showSearchBanner, meetingData.transcripts]);
 

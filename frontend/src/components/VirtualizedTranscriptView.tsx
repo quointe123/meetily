@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { RecordingStatusBar } from "./RecordingStatusBar";
 import { motion, AnimatePresence } from "framer-motion";
 import { TranscriptSegmentData } from "@/types";
+import { findMatchSpans } from "@/lib/fuzzyMatch";
+import { filterStopwords } from "@/lib/searchStopwords";
 
 export interface VirtualizedTranscriptViewProps {
     /** Transcript segments to display */
@@ -73,15 +75,23 @@ function cleanStopWords(text: string): string {
 // Highlight search terms in text
 function highlightSearchTerm(text: string, searchTerm: string | null | undefined): React.ReactNode {
     if (!searchTerm) return text;
-    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escaped})`, 'gi');
-    const parts = text.split(regex);
-    if (parts.length === 1) return text;
-    return parts.map((part, i) =>
-        regex.test(part)
-            ? <mark key={i} className="bg-yellow-300 rounded px-0.5">{part}</mark>
-            : part
-    );
+    const terms = filterStopwords(searchTerm.split(/\s+/));
+    if (terms.length === 0) return text;
+    const spans = findMatchSpans(text, terms);
+    if (spans.length === 0) return text;
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    spans.forEach((span, i) => {
+        if (span.start > cursor) parts.push(text.slice(cursor, span.start));
+        parts.push(
+            <mark key={i} className="bg-yellow-300 rounded px-0.5">
+                {text.slice(span.start, span.end)}
+            </mark>,
+        );
+        cursor = span.end;
+    });
+    if (cursor < text.length) parts.push(text.slice(cursor));
+    return parts;
 }
 
 // Memoized transcript segment component

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { findMatchSpans } from '@/lib/fuzzyMatch';
 
 export interface MeetingCardData {
   id: string;
@@ -45,19 +46,23 @@ function formatDuration(seconds: number | null): string {
 
 function highlightText(text: string, terms: string[]): React.ReactNode[] {
   if (!terms || terms.length === 0) return [text];
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const pattern = new RegExp(`(${escaped.join('|')})`, 'gi');
-  const parts = text.split(pattern);
-  return parts.map((part, i) => {
-    if (terms.some((t) => t.toLowerCase() === part.toLowerCase())) {
-      return (
-        <mark key={i} className="bg-yellow-200">
-          {part}
-        </mark>
-      );
-    }
-    return part;
+  // Fuzzy word-level matching: catches typo queries like "amaon" highlighting
+  // "amazon" in the snippet, not just literal substring matches.
+  const spans = findMatchSpans(text, terms);
+  if (spans.length === 0) return [text];
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  spans.forEach((span, i) => {
+    if (span.start > cursor) parts.push(text.slice(cursor, span.start));
+    parts.push(
+      <mark key={i} className="bg-yellow-200">
+        {text.slice(span.start, span.end)}
+      </mark>,
+    );
+    cursor = span.end;
   });
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
 }
 
 export function MeetingCard({

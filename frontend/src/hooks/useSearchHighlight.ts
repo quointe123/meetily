@@ -2,6 +2,7 @@
 
 import { useEffect, RefObject } from 'react';
 import { filterStopwords } from '@/lib/searchStopwords';
+import { wordMatchesAnyTerm } from '@/lib/fuzzyMatch';
 
 // Minimal typing for the CSS Highlights API (Chromium 105+, WebView2 shipped).
 // Fine to keep inline rather than bumping lib targets.
@@ -49,18 +50,18 @@ export function useSearchHighlight(
       if (!root) return;
       const ranges: Range[] = [];
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const wordRegex = /[\p{L}\p{N}]+/gu;
       let node = walker.nextNode();
       while (node) {
         const text = node.textContent ?? '';
-        const lower = text.toLowerCase();
-        for (const term of terms) {
-          let idx = lower.indexOf(term);
-          while (idx !== -1) {
+        wordRegex.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = wordRegex.exec(text)) !== null) {
+          if (wordMatchesAnyTerm(m[0], terms)) {
             const r = new Range();
-            r.setStart(node, idx);
-            r.setEnd(node, idx + term.length);
+            r.setStart(node, m.index);
+            r.setEnd(node, m.index + m[0].length);
             ranges.push(r);
-            idx = lower.indexOf(term, idx + term.length);
           }
         }
         node = walker.nextNode();
