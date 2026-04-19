@@ -110,7 +110,7 @@ BlockNote JSON (source)
 
 **Fallback formats d'entrée :**
 - Si `summary_json` (BlockNote) présent → parser BlockNote
-- Sinon si `markdown` présent → parser via `remark` (déjà installé transitivement par `react-markdown`)
+- Sinon si `markdown` présent → parser via un parser markdown léger (`remark-parse` ou équivalent, à choisir à l'implémentation — `react-markdown` utilise déjà `remark` transitivement)
 - Sinon legacy JSON → parser directement vers AST
 
 **APIs Tauri utilisées (aucune nouvelle commande Rust) :**
@@ -129,6 +129,7 @@ Vérifier que `tauri-plugin-fs` et `tauri-plugin-shell` sont activés dans `taur
 - Accents retirés (`é` → `e`, etc.)
 - Caractères interdits Windows/macOS (`<>:"/\|?*`) supprimés
 - Collision : suffixe auto `_1`, `_2`, etc.
+- Si le nom de réunion est vide ou invalide après slugification : fallback `Meeting_{YYYY-MM-DD}`
 
 **Emplacement :** dossier Downloads de l'OS (cross-platform via Tauri `downloadDir()`).
 
@@ -143,7 +144,7 @@ Vérifier que `tauri-plugin-fs` et `tauri-plugin-shell` sont activés dans `taur
 | Résumé en BlockNote JSON uniquement | Conversion directe depuis BlockNote |
 | Résumé en markdown legacy | Parse via `remark` → AST |
 | Fichier verrouillé (ouvert dans Word) | Toast erreur "Fermez le fichier et réessayez" |
-| Permission refusée sur Downloads | Toast erreur + fallback dialog "Choisir un emplacement" |
+| Permission refusée sur Downloads | Toast erreur + fallback dialog "Choisir un emplacement" (uniquement en récupération d'erreur, pas le flux par défaut) |
 | Résumé très long (>50 pages) | Pas de limite, spinner prolongé |
 
 ### 6. Hors scope (YAGNI — reporté en V2 si demande)
