@@ -13,13 +13,19 @@ interface UseExportOperationsProps {
   modelName?: string;
 }
 
-function looksLikePermissionError(err: any): boolean {
+function looksLikeWriteError(err: any): boolean {
   const msg = String(err?.message ?? err ?? '').toLowerCase();
   return (
     msg.includes('permission') ||
     msg.includes('denied') ||
+    msg.includes('access') ||
     msg.includes('not allowed') ||
-    msg.includes('forbidden')
+    msg.includes('forbidden') ||
+    msg.includes('sharing violation') ||
+    msg.includes('in use') ||
+    msg.includes('os error 5') ||
+    msg.includes('os error 13') ||
+    msg.includes('os error 32')
   );
 }
 
@@ -64,7 +70,7 @@ export function useExportOperations({
         try {
           result = await saveToDownloads(payload.filename, payload.content);
         } catch (saveErr: any) {
-          if (!looksLikePermissionError(saveErr)) throw saveErr;
+          if (!looksLikeWriteError(saveErr)) throw saveErr;
           // Fallback: offer the native Save As dialog.
           const dialogResult = await saveViaDialog(payload.filename, payload.content);
           if (!dialogResult) {
