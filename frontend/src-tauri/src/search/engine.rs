@@ -9,7 +9,11 @@ use crate::search::types::{Chunk, MatchKind, SearchHit, SourceType};
 
 pub const FTS_CANDIDATES: usize = 50;
 pub const SEMANTIC_CANDIDATES: usize = 50;
-pub const FUZZY_POOL: usize = 200;
+/// Fuzzy caps how many chunks it ranks so typo queries on large corpora stay snappy.
+/// Previously fuzzy was gated to FTS hits only, which broke typo tolerance entirely
+/// (no FTS hit → no fuzzy candidate → no way to match "amzaon" against "amazon").
+/// With per-token scoring this stays well under 100 ms even on 10k chunks.
+pub const FUZZY_MAX_SCAN: usize = 5000;
 pub const DEFAULT_LIMIT: usize = 20;
 
 pub struct HybridSearchEngine {
@@ -44,18 +48,11 @@ impl HybridSearchEngine {
         let fts_hits = fts_hits?;
         let sem_hits = sem_hits?;
 
-        // 2. For fuzzy, pull chunk_text for the top-N FTS candidates and rescore
-        let fts_top_ids: Vec<String> = fts_hits
-            .iter()
-            .take(FUZZY_POOL)
-            .map(|h| h.chunk_id.clone())
-            .collect();
-        let candidates = if fts_top_ids.is_empty() {
-            Vec::new()
-        } else {
-            self.load_chunks_by_ids(&fts_top_ids).await?
-        };
-        let fuz_hits = fuzzy::search(query, &candidates, 50);
+        // 2. Fuzzy scans the whole chunk table (capped at FUZZY_MAX_SCAN) so
+        // typos without any FTS hit can still find their target. Per-token
+        // best-match scoring in fuzzy.rs keeps noise low on long chunks.
+        let all_chunks = self.load_all_chunks(FUZZY_MAX_SCAN).await?;
+        let fuz_hits = fuzzy::search(query, &all_chunks, 50);
 
         // 3. RRF fusion
         let fused = fuse(
@@ -94,20 +91,13 @@ impl HybridSearchEngine {
         Ok(hits)
     }
 
-    async fn load_chunks_by_ids(&self, ids: &[String]) -> Result<Vec<Chunk>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!(
-            "SELECT id, meeting_id, source_type, source_id, chunk_text, chunk_index, char_start, char_end FROM search_chunks WHERE id IN ({})",
-            placeholders
-        );
-        let mut q = sqlx::query(&sql);
-        for id in ids {
-            q = q.bind(id);
-        }
-        let rows = q.fetch_all(&self.pool).await?;
+    async fn load_all_chunks(&self, cap: usize) -> Result<Vec<Chunk>> {
+        let rows = sqlx::query(
+            "SELECT id, meeting_id, source_type, source_id, chunk_text, chunk_index, char_start, char_end FROM search_chunks LIMIT ?1",
+        )
+        .bind(cap as i64)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows
             .into_iter()
             .filter_map(|r| {

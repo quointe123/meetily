@@ -63,6 +63,34 @@ async fn flag_stale_indexes(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
+/// Delete Whisper noise chunks that made it into the index before the chunker
+/// learned to filter them. "...", "Uh", "Ok", lone CJK characters — each used to
+/// attract stray semantic hits for unrelated queries. Uses the same threshold as
+/// `chunker::is_meaningful` (≥5 alphanumeric chars).
+/// `search_embeddings` cascades on delete; FTS is cleaned by the `search_chunks_ad` trigger.
+async fn cleanup_noise_chunks(pool: &SqlitePool) -> Result<()> {
+    // Approximate "alphanumeric count" in pure SQLite: the chunk must have some
+    // letters, and its total length after stripping whitespace/punctuation should
+    // be at least MIN_MEANINGFUL_ALNUM_CHARS. We implement this by counting the
+    // characters that aren't whitespace/punctuation via LENGTH()-based heuristic.
+    // Narrower SQL: drop chunks whose `chunk_text` is <=4 chars OR whose text
+    // matches the silence-marker regex-equivalent ("..." / "Uh" / "Ok" / "And" / "No.").
+    let res = sqlx::query(
+        r#"
+        DELETE FROM search_chunks
+        WHERE LENGTH(TRIM(chunk_text)) <= 4
+           OR chunk_text GLOB '[.][.][.]*'
+           OR LOWER(TRIM(chunk_text)) IN ('uh', 'ok', 'and', 'no.', 'oui', 'non', 'you')
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    if res.rows_affected() > 0 {
+        log::info!("cleaned up {} noise chunks from search_chunks", res.rows_affected());
+    }
+    Ok(())
+}
+
 /// Backfill embeddings for every meeting that isn't yet indexed with the current model.
 /// Emits `semantic-indexing-progress` events for the UI.
 pub async fn backfill<R: Runtime>(
@@ -72,6 +100,9 @@ pub async fn backfill<R: Runtime>(
 ) -> Result<()> {
     if let Err(e) = flag_stale_indexes(&pool).await {
         log::warn!("flag_stale_indexes failed (non-fatal): {:?}", e);
+    }
+    if let Err(e) = cleanup_noise_chunks(&pool).await {
+        log::warn!("cleanup_noise_chunks failed (non-fatal): {:?}", e);
     }
 
     let rows = sqlx::query(

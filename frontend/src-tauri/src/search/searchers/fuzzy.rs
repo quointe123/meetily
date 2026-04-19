@@ -1,42 +1,68 @@
-// NOTE: rapidfuzz 0.5 does not expose `token_set_ratio`.
-// The available API is `rapidfuzz::fuzz::ratio(iter1, iter2) -> f64` (range 0.0..1.0).
-// We implement a token-set-ratio approximation manually:
-//   1. Tokenise + sort both strings
-//   2. Compute ratio on the sorted-token representation
-//   3. Scale to 0..100 to preserve the documented threshold semantics.
+// rapidfuzz 0.5 exposes `fuzz::ratio(iter1, iter2) -> f64` (Levenshtein ratio, 0..1).
+// We build a per-token best-match scorer on top of it so the fuzzy layer actually
+// rescues typos like "amzaon" → "amazon" (whereas a whole-string sort+ratio
+// comparison drowns a 6-char query in a 200-char chunk).
 use rapidfuzz::fuzz::ratio;
 
 use crate::search::types::{Chunk, RankedHit};
 
 pub const FUZZY_THRESHOLD: f32 = 70.0;
 
-/// Sort the whitespace-separated tokens of `s` and rejoin with a space.
-fn sorted_tokens(s: &str) -> String {
-    let mut tokens: Vec<&str> = s.split_whitespace().collect();
-    tokens.sort_unstable();
-    tokens.join(" ")
+fn strip_punctuation_lower(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
-/// Token-set-ratio approximation: compare sorted token representations.
-/// Returns a score in 0..100 (matching the Python rapidfuzz convention).
-fn token_set_ratio(a: &str, b: &str) -> f64 {
-    let a_sorted = sorted_tokens(a);
-    let b_sorted = sorted_tokens(b);
-    ratio(a_sorted.chars(), b_sorted.chars()) * 100.0
+/// For a single query token, return the highest Levenshtein ratio against any
+/// whitespace-separated token in the chunk. Scores are in 0..1.
+fn best_token_ratio(query_token: &str, chunk_tokens_clean: &[String]) -> f64 {
+    if query_token.is_empty() || chunk_tokens_clean.is_empty() {
+        return 0.0;
+    }
+    chunk_tokens_clean
+        .iter()
+        .map(|ct| ratio(query_token.chars(), ct.chars()))
+        .fold(0.0_f64, f64::max)
 }
 
-/// Rescore a set of FTS candidate chunks against the query using token_set_ratio.
-/// Returns the subset above FUZZY_THRESHOLD, sorted by score desc, capped at `limit`.
+/// Score a chunk against a multi-token query: mean of each query token's best
+/// match in the chunk, scaled to 0..100 to preserve the documented threshold.
+/// "amzaon" vs a chunk containing "amazon" → ratio ≈ 0.83 → ~83 → passes 70.
+pub fn score_chunk(query_tokens_clean: &[String], chunk_text_raw: &str) -> f32 {
+    if query_tokens_clean.is_empty() {
+        return 0.0;
+    }
+    let chunk_tokens: Vec<String> = chunk_text_raw
+        .split_whitespace()
+        .map(strip_punctuation_lower)
+        .filter(|t| !t.is_empty())
+        .collect();
+    let sum: f64 = query_tokens_clean
+        .iter()
+        .map(|qt| best_token_ratio(qt, &chunk_tokens))
+        .sum();
+    ((sum / query_tokens_clean.len() as f64) * 100.0) as f32
+}
+
+/// Rescore `candidates` against `query`. Caller controls the pool — engine.rs
+/// now passes *all* chunks so typo queries (which produce zero FTS hits) still
+/// get a chance to surface the real match.
 pub fn search(query: &str, candidates: &[Chunk], limit: usize) -> Vec<RankedHit> {
-    let q = query.to_lowercase();
+    let q_tokens: Vec<String> = query
+        .split_whitespace()
+        .map(strip_punctuation_lower)
+        .filter(|t| !t.is_empty())
+        .collect();
+    if q_tokens.is_empty() {
+        return Vec::new();
+    }
     let mut scored: Vec<RankedHit> = candidates
         .iter()
-        .map(|c| {
-            let s = token_set_ratio(&q, &c.chunk_text.to_lowercase()) as f32;
-            RankedHit {
-                chunk_id: c.id.clone(),
-                score: s,
-            }
+        .map(|c| RankedHit {
+            chunk_id: c.id.clone(),
+            score: score_chunk(&q_tokens, &c.chunk_text),
         })
         .filter(|h| h.score >= FUZZY_THRESHOLD)
         .collect();
@@ -76,6 +102,28 @@ mod tests {
         let cands = [mk("a", "decision on pricing")];
         let hits = search("decison pricng", &cands, 10);
         assert_eq!(hits.len(), 1, "expected typo to still match");
+        assert!(hits[0].score >= 85.0, "typos should still score high: {}", hits[0].score);
+    }
+
+    #[test]
+    fn amazon_typo_finds_long_chunk() {
+        // Regression: with the old whole-string sort+ratio the short query was
+        // drowned by the surrounding chunk text and never crossed threshold.
+        let cands = [mk(
+            "a",
+            "Bonjour, on était au travail. Amazon nous a fait un remboursement aujourd'hui.",
+        )];
+        let hits = search("amzaon", &cands, 10);
+        assert_eq!(hits.len(), 1, "typo 'amzaon' should still surface the Amazon chunk");
+        assert!(hits[0].score >= 75.0, "expected strong match, got {}", hits[0].score);
+    }
+
+    #[test]
+    fn punctuation_in_chunk_does_not_block_match() {
+        // Words in transcripts often carry trailing punctuation; strip before compare.
+        let cands = [mk("a", "on parle d'Amazon, puis de Fnac!")];
+        let hits = search("amazon", &cands, 10);
+        assert_eq!(hits.len(), 1);
     }
 
     #[test]

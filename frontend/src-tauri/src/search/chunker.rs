@@ -3,6 +3,17 @@ use uuid::Uuid;
 
 pub const DEFAULT_CHUNK_SIZE: usize = 800;
 pub const DEFAULT_OVERLAP: usize = 200;
+/// Whisper routinely emits silence / filler markers ("...", "Uh", "Ok", "好").
+/// Those chunks add no discriminative signal but still collect a near-center
+/// embedding that passes the semantic cosine threshold by coincidence and
+/// floods results like `pricing` or `99 euros` with placeholder hits.
+/// Drop anything that doesn't carry at least this many alphanumeric chars.
+pub const MIN_MEANINGFUL_ALNUM_CHARS: usize = 5;
+
+/// True when `text` carries enough alphanumeric content to be worth indexing.
+pub fn is_meaningful(text: &str) -> bool {
+    text.chars().filter(|c| c.is_alphanumeric()).count() >= MIN_MEANINGFUL_ALNUM_CHARS
+}
 
 pub fn chunk_text(
     meeting_id: &str,
@@ -13,7 +24,7 @@ pub fn chunk_text(
     overlap: usize,
 ) -> Vec<Chunk> {
     let trimmed = text.trim();
-    if trimmed.is_empty() {
+    if trimmed.is_empty() || !is_meaningful(trimmed) {
         return Vec::new();
     }
 
@@ -95,6 +106,26 @@ mod tests {
     fn empty_text_returns_empty() {
         let out = chunk_text("m1", SourceType::Transcript, None, "", 800, 200);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn whisper_silence_markers_are_dropped() {
+        // "...", "Uh", "Ok", a lone CJK char — all common Whisper artifacts with
+        // no useful signal. They used to create chunks whose embedding landed
+        // near the center and polluted every short-query semantic result.
+        for noise in ["...", "Uh", "Ok", "No.", "And", "好", "謝謝", "   ...   "] {
+            let out = chunk_text("m1", SourceType::Transcript, None, noise, 800, 200);
+            assert!(out.is_empty(), "expected {:?} to be filtered as noise", noise);
+        }
+    }
+
+    #[test]
+    fn short_but_meaningful_text_survives() {
+        // 5 alphanumeric chars is the cutoff.
+        let out = chunk_text("m1", SourceType::Transcript, None, "hello", 800, 200);
+        assert_eq!(out.len(), 1);
+        let out = chunk_text("m1", SourceType::Transcript, None, "D'accord.", 800, 200);
+        assert_eq!(out.len(), 1);
     }
 
     #[test]
