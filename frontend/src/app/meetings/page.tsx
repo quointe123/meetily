@@ -9,6 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
 import { MeetingCard, MeetingCardData } from '@/components/MeetingCard';
+import { filterStopwords } from '@/lib/searchStopwords';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
 import {
   Dialog,
@@ -233,7 +234,7 @@ export default function MeetingsPage() {
                   onRename={handleRenameOpen}
                   onDelete={(id) => setDeleteTarget(id)}
                   searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
-                  highlightTerms={searchQuery.trim() ? searchQuery.split(/\s+/) : []}
+                  highlightTerms={searchQuery.trim() ? filterStopwords(searchQuery.split(/\s+/)) : []}
                 />
                 {searchQuery.trim() && (() => {
                   const hit = getBestHitForMeeting(meeting.id);

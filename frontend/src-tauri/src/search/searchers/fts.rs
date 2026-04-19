@@ -3,26 +3,69 @@ use sqlx::{Row, SqlitePool};
 
 use crate::search::types::RankedHit;
 
+/// Common French + English stopwords. Kept compact on purpose — these are the tokens
+/// that (a) appear in almost every chunk and (b) carry no discriminative signal.
+/// Matching is done on the lowercased token with diacritics preserved, so the entries
+/// must match the raw text (e.g. "à", "où").
+const STOPWORDS: &[&str] = &[
+    // French articles / determiners
+    "le", "la", "les", "l", "un", "une", "des", "de", "du", "d",
+    // French conjunctions / prepositions
+    "et", "ou", "mais", "donc", "car", "ni", "or",
+    "à", "au", "aux", "en", "dans", "sur", "sous", "pour", "par", "avec", "sans",
+    "chez", "vers", "entre", "depuis",
+    // French pronouns
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
+    "me", "te", "se", "lui", "leur", "y",
+    "ce", "cet", "cette", "ces", "ça", "cela",
+    "qui", "que", "quoi", "dont", "où",
+    // French common verbs / particles
+    "est", "sont", "es", "ai", "as", "a", "ont", "avons", "avez",
+    "suis", "êtes", "été", "être",
+    "ne", "pas", "plus", "si",
+    // English articles / conjunctions / prepositions
+    "the", "a", "an", "and", "or", "but",
+    "of", "to", "in", "on", "at", "for", "by", "with", "from", "into", "as",
+    // English pronouns / copulas
+    "is", "are", "was", "were", "be", "been", "being",
+    "i", "you", "he", "she", "it", "we", "they",
+    "this", "that", "these", "those",
+    "not", "no",
+];
+
+fn is_stopword(token: &str) -> bool {
+    let lower = token.to_lowercase();
+    STOPWORDS.iter().any(|sw| *sw == lower)
+}
+
 /// Escape a user query for FTS5 MATCH:
-/// - wrap each token in double quotes to disable operator parsing
+/// - drop stopwords so common words ("et", "the") don't dilute the signal
+/// - wrap each remaining token in double quotes to disable operator parsing
 /// - append `*` to the last token for prefix match
+/// - join with explicit `OR` so BM25 naturally ranks chunks that match rarer tokens
+///   (proper nouns, topic words) above chunks that match only common tokens
 pub fn escape_fts_query(query: &str) -> String {
-    let tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
-    if tokens.is_empty() {
+    let all_tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
+    if all_tokens.is_empty() {
         return String::new();
     }
+
+    // Filter stopwords. If *all* tokens are stopwords (rare: the user typed only
+    // "et" or "the"), keep them rather than returning an empty query.
+    let filtered: Vec<&str> = all_tokens.iter().copied().filter(|t| !is_stopword(t)).collect();
+    let tokens: Vec<&str> = if filtered.is_empty() { all_tokens } else { filtered };
+
     let mut parts: Vec<String> = tokens
         .iter()
         .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
         .collect();
     if let Some(last) = parts.last_mut() {
-        // remove trailing closing quote to append *
         if last.ends_with('"') {
             last.pop();
             last.push_str("\"*");
         }
     }
-    parts.join(" ")
+    parts.join(" OR ")
 }
 
 /// Search FTS5 with BM25 ranking. Returns top `limit` chunk ids with their BM25 score
@@ -62,8 +105,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn escape_preserves_tokens_and_adds_prefix_star() {
-        assert_eq!(escape_fts_query("hello world"), "\"hello\" \"world\"*");
+    fn escape_joins_tokens_with_or_and_adds_prefix_star() {
+        assert_eq!(escape_fts_query("hello world"), "\"hello\" OR \"world\"*");
     }
 
     #[test]
@@ -74,6 +117,26 @@ mod tests {
 
     #[test]
     fn escape_escapes_embedded_double_quotes() {
-        assert_eq!(escape_fts_query("say \"hi\""), "\"say\" \"\"\"hi\"\"\"*");
+        assert_eq!(escape_fts_query("say \"hi\""), "\"say\" OR \"\"\"hi\"\"\"*");
+    }
+
+    #[test]
+    fn stopwords_are_dropped_so_proper_nouns_drive_the_match() {
+        // Regression: "Louis et Quentin" used to produce `"Louis" "et" "Quentin"*`
+        // which required all three (AND) and also let "et" dilute BM25 on fallback paths.
+        assert_eq!(escape_fts_query("Louis et Quentin"), "\"Louis\" OR \"Quentin\"*");
+        assert_eq!(escape_fts_query("the pricing decision"), "\"pricing\" OR \"decision\"*");
+    }
+
+    #[test]
+    fn all_stopword_query_is_kept_rather_than_emptied() {
+        // If the user *only* typed stopwords, we'd rather search for them than return nothing.
+        assert_eq!(escape_fts_query("et"), "\"et\"*");
+    }
+
+    #[test]
+    fn stopword_detection_is_case_insensitive() {
+        assert_eq!(escape_fts_query("Et"), "\"Et\"*"); // single stopword — kept as fallback
+        assert_eq!(escape_fts_query("Louis Et Quentin"), "\"Louis\" OR \"Quentin\"*");
     }
 }
