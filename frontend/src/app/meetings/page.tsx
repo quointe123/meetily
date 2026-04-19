@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X } from 'lucide-react';
-import { useSearchMeetings, SearchHit } from '@/hooks/useSearchMeetings';
+import { useSearchMeetings } from '@/hooks/useSearchMeetings';
 import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
-import { MeetingCard, MeetingCardData, MatchBadge } from '@/components/MeetingCard';
+import { MeetingCard, MeetingCardData } from '@/components/MeetingCard';
 import { filterStopwords } from '@/lib/searchStopwords';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
 import {
@@ -204,9 +204,6 @@ export default function MeetingsPage() {
     }
   };
 
-  const getBestHitForMeeting = (meetingId: string): SearchHit | undefined =>
-    searchResults.find(r => r.meeting_id === meetingId);
-
   const indexingProgress = indexingStatus && indexingStatus.total_meetings > 0
     ? Math.round((indexingStatus.indexed_meetings / indexingStatus.total_meetings) * 100)
     : 0;
@@ -339,28 +336,17 @@ export default function MeetingsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {displayedMeetings.map((meeting) => {
-              const hit = searchQuery.trim() ? getBestHitForMeeting(meeting.id) : undefined;
-              const badges = hit ? (
-                <>
-                  {hit.match_kinds.includes('fts') && <MatchBadge kind="fts" />}
-                  {hit.match_kinds.includes('semantic') && <MatchBadge kind="semantic" />}
-                  {hit.match_kinds.includes('fuzzy') && <MatchBadge kind="fuzzy" />}
-                </>
-              ) : null;
-              return (
-                <MeetingCard
-                  key={meeting.id}
-                  meeting={meeting}
-                  onClick={() => handleCardClick(meeting)}
-                  onRename={handleRenameOpen}
-                  onDelete={(id) => setDeleteTarget(id)}
-                  searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
-                  highlightTerms={searchQuery.trim() ? filterStopwords(searchQuery.split(/\s+/)) : []}
-                  badges={badges}
-                />
-              );
-            })}
+            {displayedMeetings.map((meeting) => (
+              <MeetingCard
+                key={meeting.id}
+                meeting={meeting}
+                onClick={() => handleCardClick(meeting)}
+                onRename={handleRenameOpen}
+                onDelete={(id) => setDeleteTarget(id)}
+                searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
+                highlightTerms={searchQuery.trim() ? filterStopwords(searchQuery.split(/\s+/)) : []}
+              />
+            ))}
           </div>
         )}
       </div>

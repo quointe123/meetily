@@ -19,8 +19,6 @@ interface MeetingCardProps {
   onDelete: (meetingId: string) => void;
   searchSnippet?: string | null;
   highlightTerms?: string[];
-  /** Rendered at the bottom of the card — typically the match-kind badges during search. */
-  badges?: React.ReactNode;
 }
 
 const SAME_DAY_MS = 24 * 60 * 60 * 1000;
@@ -88,7 +86,6 @@ export function MeetingCard({
   onDelete,
   searchSnippet,
   highlightTerms,
-  badges,
 }: MeetingCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -236,41 +233,6 @@ export function MeetingCard({
         )}
       </div>
 
-      {/* Badges footer (rendered only during search) */}
-      {badges && (
-        <footer className="flex items-center gap-1.5 border-t border-gray-100 bg-gray-50/60 px-5 py-2">
-          {badges}
-        </footer>
-      )}
     </article>
-  );
-}
-
-interface MatchBadgeProps {
-  kind: 'fts' | 'semantic' | 'fuzzy';
-}
-
-/** Small match-kind chip. Kept intentionally flat so three of them don't shout. */
-export function MatchBadge({ kind }: MatchBadgeProps) {
-  const { label, tone } = {
-    fts: {
-      label: 'Exact',
-      tone: 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200/70',
-    },
-    semantic: {
-      label: 'Sémantique',
-      tone: 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200',
-    },
-    fuzzy: {
-      label: 'Similaire',
-      tone: 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200',
-    },
-  }[kind];
-  return (
-    <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.1em] ${tone}`}
-    >
-      {label}
-    </span>
   );
 }
