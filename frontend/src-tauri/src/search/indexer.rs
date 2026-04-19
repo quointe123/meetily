@@ -78,6 +78,33 @@ pub async fn collect_chunks_for_meeting(pool: &SqlitePool, meeting_id: &str) -> 
         }
     }
 
+    // 4. summary_processes — AI-generated summaries stored as JSON {"markdown": "..."}.
+    // Falls back to the raw string if the payload isn't JSON or lacks a `markdown` field.
+    let summaries = sqlx::query(
+        "SELECT result FROM summary_processes WHERE meeting_id = ?1 AND status = 'completed' AND result IS NOT NULL",
+    )
+    .bind(meeting_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    for r in summaries {
+        let raw: String = r.try_get("result").unwrap_or_default();
+        let text = serde_json::from_str::<serde_json::Value>(&raw)
+            .ok()
+            .and_then(|v| v.get("markdown").and_then(|m| m.as_str()).map(|s| s.to_string()))
+            .unwrap_or(raw);
+        if !text.trim().is_empty() {
+            all.extend(chunk_text(
+                meeting_id,
+                SourceType::Summary,
+                Some(meeting_id),
+                &text,
+                DEFAULT_CHUNK_SIZE,
+                DEFAULT_OVERLAP,
+            ));
+        }
+    }
+
     Ok(all)
 }
 

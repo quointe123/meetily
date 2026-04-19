@@ -39,6 +39,30 @@ pub async fn current_status(pool: &SqlitePool) -> Result<IndexingStatus> {
     })
 }
 
+/// Flag meetings whose source data contains content not yet reflected in `search_chunks`.
+/// Currently: completed summaries in `summary_processes` with no corresponding Summary chunks.
+/// Runs at startup before backfill so new sources trigger a re-index without manual action.
+async fn flag_stale_indexes(pool: &SqlitePool) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE indexing_state
+        SET status = 'pending'
+        WHERE status = 'embedded'
+          AND meeting_id IN (
+            SELECT sp.meeting_id FROM summary_processes sp
+            WHERE sp.status = 'completed' AND sp.result IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM search_chunks sc
+                WHERE sc.meeting_id = sp.meeting_id AND sc.source_type = 'summary'
+              )
+          )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Backfill embeddings for every meeting that isn't yet indexed with the current model.
 /// Emits `semantic-indexing-progress` events for the UI.
 pub async fn backfill<R: Runtime>(
@@ -46,6 +70,10 @@ pub async fn backfill<R: Runtime>(
     pool: SqlitePool,
     cache: Arc<EmbeddingCache>,
 ) -> Result<()> {
+    if let Err(e) = flag_stale_indexes(&pool).await {
+        log::warn!("flag_stale_indexes failed (non-fatal): {:?}", e);
+    }
+
     let rows = sqlx::query(
         r#"
         SELECT m.id FROM meetings m
