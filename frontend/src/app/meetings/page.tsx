@@ -129,12 +129,19 @@ export default function MeetingsPage() {
   const handleCardClick = (meeting: MeetingCardData) => {
     setCurrentMeeting({ id: meeting.id, title: meeting.title });
     if (searchQuery.trim()) {
-      // Find the first transcript hit for this meeting (has source_id pointing to a transcript row)
-      const hit = searchResults.find(
-        r => r.meeting_id === meeting.id && r.source_type === 'transcript' && r.source_id
+      const meetingHits = searchResults.filter(r => r.meeting_id === meeting.id);
+      // Prefer a transcript hit with offsets so we can scroll-and-highlight the exact segment.
+      const transcriptHit = meetingHits.find(
+        r => r.source_type === 'transcript' && r.source_id && r.char_start !== null && r.char_end !== null
       );
-      if (hit && hit.char_start !== null && hit.char_end !== null) {
-        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}&transcript_id=${hit.source_id}&highlight_start=${hit.char_start}&highlight_end=${hit.char_end}`);
+      if (transcriptHit) {
+        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}&transcript_id=${transcriptHit.source_id}&highlight_start=${transcriptHit.char_start}&highlight_end=${transcriptHit.char_end}`);
+        return;
+      }
+      // No transcript hit but we still have a match (likely a summary/title hit). Pass the
+      // search term so the SearchBanner + summary highlighting kick in.
+      if (meetingHits.length > 0) {
+        router.push(`/meeting-details?id=${meeting.id}&search=${encodeURIComponent(searchQuery)}`);
         return;
       }
     }

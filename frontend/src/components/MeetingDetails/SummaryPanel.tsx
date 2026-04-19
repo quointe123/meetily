@@ -7,7 +7,8 @@ import { EmptyStateSummary } from '@/components/EmptyStateSummary';
 import { ModelConfig } from '@/components/ModelSettingsModal';
 import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
-import { RefObject } from 'react';
+import { RefObject, useRef } from 'react';
+import { useSearchHighlight } from '@/hooks/useSearchHighlight';
 
 interface SummaryPanelProps {
   meeting: {
@@ -47,6 +48,7 @@ interface SummaryPanelProps {
   onTemplateSelect: (templateId: string, templateName: string) => void;
   isModelConfigLoading?: boolean;
   onOpenModelSettings?: (openFn: () => void) => void;
+  searchTerm?: string | null;
 }
 
 export function SummaryPanel({
@@ -82,9 +84,12 @@ export function SummaryPanel({
   selectedTemplate,
   onTemplateSelect,
   isModelConfigLoading = false,
-  onOpenModelSettings
+  onOpenModelSettings,
+  searchTerm,
 }: SummaryPanelProps) {
   const isSummaryLoading = summaryStatus === 'processing' || summaryStatus === 'summarizing' || summaryStatus === 'regenerating';
+  const summaryContentRef = useRef<HTMLDivElement>(null);
+  useSearchHighlight(summaryContentRef, searchTerm);
 
   return (
     <div className="flex-1 min-w-0 flex flex-col bg-white overflow-hidden">
@@ -241,7 +246,7 @@ export function SummaryPanel({
               ) : null}
             </div>
           )}
-          <div className="p-6 w-full">
+          <div className="p-6 w-full" ref={summaryContentRef}>
             <BlockNoteSummaryView
               ref={summaryRef}
               summaryData={aiSummary}

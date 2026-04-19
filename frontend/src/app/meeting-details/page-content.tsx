@@ -281,6 +281,7 @@ export default function PageContent({
           onTemplateSelect={templates.handleTemplateSelection}
           isModelConfigLoading={false}
           onOpenModelSettings={handleRegisterModalOpen}
+          searchTerm={showSearchBanner ? searchTerm : undefined}
         />
       </div>
     </motion.div>

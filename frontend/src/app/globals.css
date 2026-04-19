@@ -212,3 +212,12 @@
     overflow: visible !important;
   }
 }
+
+/* Search term highlight painted by useSearchHighlight (CSS Highlights API).
+   Sits outside the @layer block on purpose — ::highlight pseudo-element doesn't
+   belong in a Tailwind layer. */
+::highlight(search-match) {
+  background-color: #fde68a; /* amber-200 */
+  color: inherit;
+  border-radius: 2px;
+}
