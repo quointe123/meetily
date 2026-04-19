@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useSidebar } from '@/components/Sidebar/SidebarProvider';
-import { MeetingCard, MeetingCardData } from '@/components/MeetingCard';
+import { MeetingCard, MeetingCardData, MatchBadge } from '@/components/MeetingCard';
 import { filterStopwords } from '@/lib/searchStopwords';
 import { ConfirmationModal } from '@/components/ConfirmationModel/confirmation-modal';
 import {
@@ -232,36 +232,29 @@ export default function MeetingsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {displayedMeetings.map((meeting) => (
-              <div key={meeting.id} className="flex flex-col">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {displayedMeetings.map((meeting) => {
+              const hit = searchQuery.trim() ? getBestHitForMeeting(meeting.id) : undefined;
+              const badges = hit ? (
+                <>
+                  {hit.match_kinds.includes('fts') && <MatchBadge kind="fts" />}
+                  {hit.match_kinds.includes('semantic') && <MatchBadge kind="semantic" />}
+                  {hit.match_kinds.includes('fuzzy') && <MatchBadge kind="fuzzy" />}
+                </>
+              ) : null;
+              return (
                 <MeetingCard
+                  key={meeting.id}
                   meeting={meeting}
                   onClick={() => handleCardClick(meeting)}
                   onRename={handleRenameOpen}
                   onDelete={(id) => setDeleteTarget(id)}
                   searchSnippet={searchQuery.trim() ? getSearchSnippet(meeting.id) : null}
                   highlightTerms={searchQuery.trim() ? filterStopwords(searchQuery.split(/\s+/)) : []}
+                  badges={badges}
                 />
-                {searchQuery.trim() && (() => {
-                  const hit = getBestHitForMeeting(meeting.id);
-                  if (!hit) return null;
-                  return (
-                    <div className="flex gap-1 mt-1 px-1">
-                      {hit.match_kinds.includes('fts') && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">exact</span>
-                      )}
-                      {hit.match_kinds.includes('semantic') && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">sémantique</span>
-                      )}
-                      {hit.match_kinds.includes('fuzzy') && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-gray-200 bg-white text-gray-500">fuzzy</span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
