@@ -30,6 +30,7 @@ interface BlockNoteSummaryViewProps {
 export interface BlockNoteSummaryViewRef {
   saveSummary: () => Promise<void>;
   getMarkdown: () => Promise<string>;
+  getDocument: () => unknown; // returns the live BlockNote JSON (array of blocks) or null
   isDirty: boolean;
 }
 
@@ -196,6 +197,18 @@ export const BlockNoteSummaryView = forwardRef<BlockNoteSummaryViewRef, BlockNot
         console.error('❌ Failed to generate markdown:', err);
         return '';
       }
+    },
+    getDocument: () => {
+      // For blocknote format: the live currentBlocks state holds unsaved edits.
+      if (format === 'blocknote' && currentBlocks.length > 0) {
+        return currentBlocks;
+      }
+      // For markdown format: the editor's document is the source of truth.
+      if (format === 'markdown' && editor) {
+        return editor.document;
+      }
+      // For legacy format or no editor: return null so the hook falls back to stored data.
+      return null;
     },
     isDirty
   }), [handleSave, isDirty, editor, format, currentBlocks, data]);
