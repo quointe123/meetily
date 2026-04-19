@@ -2,7 +2,9 @@
 
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
-import { Copy, Save, Loader2, Search, FolderOpen } from 'lucide-react';
+import { Copy, Save, Loader2 } from 'lucide-react';
+import { ExportDropdown } from '@/components/MeetingDetails/ExportDropdown';
+import type { ExportFormat } from '@/lib/export/types';
 
 interface SummaryUpdaterButtonGroupProps {
   isSaving: boolean;
@@ -12,6 +14,11 @@ interface SummaryUpdaterButtonGroupProps {
   onFind?: () => void;
   onOpenFolder: () => Promise<void>;
   hasSummary: boolean;
+  // --- new export props ---
+  exportingFormat: ExportFormat | null;
+  onExportMarkdown: () => void;
+  onExportDocx: () => void;
+  onExportPdf: () => void;
 }
 
 export function SummaryUpdaterButtonGroup({
@@ -21,19 +28,43 @@ export function SummaryUpdaterButtonGroup({
   onCopy,
   onFind,
   onOpenFolder,
-  hasSummary
+  hasSummary,
+  exportingFormat,
+  onExportMarkdown,
+  onExportDocx,
+  onExportPdf,
 }: SummaryUpdaterButtonGroupProps) {
   return (
     <ButtonGroup>
+      {/* Copy button */}
+      <Button
+        variant="outline"
+        size="sm"
+        title="Copy Summary"
+        onClick={() => { onCopy(); }}
+        disabled={!hasSummary}
+        className="cursor-pointer"
+      >
+        <Copy />
+        <span className="hidden lg:inline">Copy</span>
+      </Button>
+
+      {/* Export dropdown — between Copy and Save per spec */}
+      <ExportDropdown
+        hasSummary={hasSummary}
+        exportingFormat={exportingFormat}
+        onExportMarkdown={onExportMarkdown}
+        onExportDocx={onExportDocx}
+        onExportPdf={onExportPdf}
+      />
+
       {/* Save button */}
       <Button
         variant="outline"
         size="sm"
-        className={`${isDirty ? 'bg-green-200' : ""}`}
-        title={isSaving ? "Saving" : "Save Changes"}
-        onClick={() => {
-          onSave();
-        }}
+        className={`${isDirty ? 'bg-green-200' : ''}`}
+        title={isSaving ? 'Saving' : 'Save Changes'}
+        onClick={() => { onSave(); }}
         disabled={isSaving}
       >
         {isSaving ? (
@@ -48,39 +79,6 @@ export function SummaryUpdaterButtonGroup({
           </>
         )}
       </Button>
-
-      {/* Copy button */}
-      <Button
-        variant="outline"
-        size="sm"
-        title="Copy Summary"
-        onClick={() => {
-          onCopy();
-        }}
-        disabled={!hasSummary}
-        className="cursor-pointer"
-      >
-        <Copy />
-        <span className="hidden lg:inline">Copy</span>
-      </Button>
-
-      {/* Find button */}
-      {/* {onFind && (
-        <Button
-          variant="outline"
-          size="sm"
-          title="Find in Summary"
-          onClick={() => {
-            Analytics.trackButtonClick('find_in_summary', 'meeting_details');
-            onFind();
-          }}
-          disabled={!hasSummary}
-          className="cursor-pointer"
-        >
-          <Search />
-          <span className="hidden lg:inline">Find</span>
-        </Button>
-      )} */}
     </ButtonGroup>
   );
 }

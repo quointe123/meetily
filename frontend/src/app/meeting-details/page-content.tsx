@@ -18,6 +18,7 @@ import { useSummaryGeneration } from '@/hooks/meeting-details/useSummaryGenerati
 import { useTemplates } from '@/hooks/meeting-details/useTemplates';
 import { useCopyOperations } from '@/hooks/meeting-details/useCopyOperations';
 import { useMeetingOperations } from '@/hooks/meeting-details/useMeetingOperations';
+import { useExportOperations } from '@/hooks/meeting-details/useExportOperations';
 import { useConfig } from '@/contexts/ConfigContext';
 
 export default function PageContent({
@@ -182,6 +183,14 @@ export default function PageContent({
     meeting,
   });
 
+  const exportOperations = useExportOperations({
+    meeting,
+    meetingTitle: meetingData.meetingTitle,
+    aiSummary: meetingData.aiSummary,
+    blockNoteSummaryRef: meetingData.blockNoteSummaryRef,
+    modelName: modelConfig?.model,
+  });
+
   // Auto-generate summary when flag is set
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +270,10 @@ export default function PageContent({
           onSaveAll={meetingData.saveAllChanges}
           onCopySummary={copyOperations.handleCopySummary}
           onOpenFolder={meetingOperations.handleOpenMeetingFolder}
+          exportingFormat={exportOperations.exportingFormat}
+          onExportMarkdown={exportOperations.handleExportMarkdown}
+          onExportDocx={exportOperations.handleExportDocx}
+          onExportPdf={exportOperations.handleExportPdf}
           aiSummary={meetingData.aiSummary}
           summaryStatus={summaryGeneration.summaryStatus}
           transcripts={meetingData.transcripts}

@@ -9,6 +9,7 @@ import { SummaryGeneratorButtonGroup } from './SummaryGeneratorButtonGroup';
 import { SummaryUpdaterButtonGroup } from './SummaryUpdaterButtonGroup';
 import { RefObject, useRef } from 'react';
 import { useSearchHighlight } from '@/hooks/useSearchHighlight';
+import type { ExportFormat } from '@/lib/export/types';
 
 interface SummaryPanelProps {
   meeting: {
@@ -27,6 +28,10 @@ interface SummaryPanelProps {
   onSaveAll: () => Promise<void>;
   onCopySummary: () => Promise<void>;
   onOpenFolder: () => Promise<void>;
+  exportingFormat: ExportFormat | null;
+  onExportMarkdown: () => void;
+  onExportDocx: () => void;
+  onExportPdf: () => void;
   aiSummary: Summary | null;
   summaryStatus: 'idle' | 'processing' | 'summarizing' | 'regenerating' | 'completed' | 'error';
   transcripts: Transcript[];
@@ -64,6 +69,10 @@ export function SummaryPanel({
   onSaveAll,
   onCopySummary,
   onOpenFolder,
+  exportingFormat,
+  onExportMarkdown,
+  onExportDocx,
+  onExportPdf,
   aiSummary,
   summaryStatus,
   transcripts,
@@ -133,11 +142,14 @@ export function SummaryPanel({
                 onSave={onSaveAll}
                 onCopy={onCopySummary}
                 onFind={() => {
-                  // TODO: Implement find in summary functionality
                   console.log('Find in summary clicked');
                 }}
                 onOpenFolder={onOpenFolder}
                 hasSummary={!!aiSummary}
+                exportingFormat={exportingFormat}
+                onExportMarkdown={onExportMarkdown}
+                onExportDocx={onExportDocx}
+                onExportPdf={onExportPdf}
               />
             </div>
           </div>
