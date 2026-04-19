@@ -76,6 +76,23 @@
   animation-delay: 150ms;
 }
 
+/* Indeterminate scan line for the search input while a query is in flight.
+   A short amber segment slides across the bottom edge on a 1.1s cycle —
+   active feedback that isn't a spinner. */
+@keyframes search-scan {
+  0% {
+    transform: translateX(-40%);
+  }
+
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.animate-search-scan {
+  animation: search-scan 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
