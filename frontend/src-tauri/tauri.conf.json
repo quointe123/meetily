@@ -71,6 +71,13 @@
                                     "path": "$APPDATA/*"
                                 }
                             ]
+                        },
+                        "shell:default",
+                        {
+                            "identifier": "shell:allow-open",
+                            "allow": [
+                                { "path": "**" }
+                            ]
                         }
                     ]
                 }
