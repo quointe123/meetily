@@ -116,6 +116,57 @@ describe('blockNoteToAST', () => {
     ]);
   });
 
+  it('handles BlockNote 0.36+ table cells wrapped as { content } objects', () => {
+    const input = [
+      {
+        type: 'table',
+        content: {
+          rows: [
+            {
+              cells: [
+                { type: 'tableCell', content: [{ type: 'text', text: 'Task', styles: {} }] },
+                { type: 'tableCell', content: [{ type: 'text', text: 'Owner', styles: {} }] },
+              ],
+            },
+            {
+              cells: [
+                { type: 'tableCell', content: [{ type: 'text', text: 'Deploy', styles: {} }] },
+                { type: 'tableCell', content: [{ type: 'text', text: 'Alice', styles: {} }] },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const result = blockNoteToAST(input);
+    expect(result).toEqual([
+      {
+        type: 'table',
+        rows: [
+          { isHeader: true, cells: [[{ text: 'Task' }], [{ text: 'Owner' }]] },
+          { isHeader: false, cells: [[{ text: 'Deploy' }], [{ text: 'Alice' }]] },
+        ],
+      },
+    ]);
+  });
+
+  it('does not throw on malformed table cells (defensive)', () => {
+    const input = [
+      {
+        type: 'table',
+        content: {
+          rows: [
+            { cells: [null, undefined, { type: 'tableCell' }, 'not-an-object'] as any },
+          ],
+        },
+      },
+    ];
+    expect(() => blockNoteToAST(input)).not.toThrow();
+    const result = blockNoteToAST(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('table');
+  });
+
   it('falls back to paragraph for unknown block types', () => {
     const input = [
       {

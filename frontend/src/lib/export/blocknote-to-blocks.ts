@@ -24,10 +24,10 @@ function mapStylesToMarks(styles?: { bold?: boolean; italic?: boolean; code?: bo
   return marks.length > 0 ? marks : undefined;
 }
 
-function toInlines(content: BNInlineContent[] | undefined): InlineText[] {
-  if (!content) return [];
-  return content
-    .filter((c) => c.type === 'text' || c.type === 'link')
+function toInlines(content: unknown): InlineText[] {
+  if (!Array.isArray(content)) return [];
+  return (content as BNInlineContent[])
+    .filter((c) => c && (c.type === 'text' || c.type === 'link'))
     .map((c): InlineText => {
       if (c.type === 'link' && c.content) {
         const first = c.content[0];
@@ -49,14 +49,24 @@ function toListItem(block: BNBlock): ListItem {
 }
 
 function toTable(block: BNBlock): BlockNode {
-  const tableContent = block.content as { rows: Array<{ cells: BNInlineContent[][] }> } | undefined;
+  const tableContent = block.content as { rows?: Array<{ cells?: unknown[] }> } | undefined;
   if (!tableContent || !Array.isArray(tableContent.rows)) {
     return { type: 'paragraph', inlines: [] };
   }
-  const rows: TableRow[] = tableContent.rows.map((row, rowIdx) => ({
-    isHeader: rowIdx === 0,
-    cells: row.cells.map((cellInlines) => toInlines(cellInlines)),
-  }));
+  const rows: TableRow[] = tableContent.rows.map((row, rowIdx) => {
+    const rawCells = Array.isArray(row?.cells) ? row.cells : [];
+    return {
+      isHeader: rowIdx === 0,
+      cells: rawCells.map((cell: any) => {
+        // BlockNote 0.36+: a cell may be an array of inlines OR an object
+        // like { type: 'tableCell', content: [...] }. Newer releases also
+        // wrap each inline in a { text, styles } structure at top level.
+        if (Array.isArray(cell)) return toInlines(cell);
+        if (cell && Array.isArray(cell.content)) return toInlines(cell.content);
+        return [];
+      }),
+    };
+  });
   return { type: 'table', rows };
 }
 
