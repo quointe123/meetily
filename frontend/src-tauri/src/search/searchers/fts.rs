@@ -33,7 +33,7 @@ const STOPWORDS: &[&str] = &[
     "not", "no",
 ];
 
-fn is_stopword(token: &str) -> bool {
+pub(crate) fn is_stopword(token: &str) -> bool {
     let lower = token.to_lowercase();
     STOPWORDS.iter().any(|sw| *sw == lower)
 }

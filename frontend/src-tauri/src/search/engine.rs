@@ -92,11 +92,10 @@ impl HybridSearchEngine {
             })
             .collect();
         hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        // If even the best hit is below the noise floor, the query has no real match.
-        // Prefer an empty result set to a handful of misleading single-ranker hits.
-        if hits.first().map_or(true, |h| h.score < MIN_TOP_SCORE) {
-            return Ok(Vec::new());
-        }
+        // Drop every hit below the noise floor, not just check the top. Otherwise
+        // queries like "Louis et Quentin" return 2 real hits at 0.05 plus trailing
+        // 0.016 scraps from single-ranker coincidences.
+        hits.retain(|h| h.score >= MIN_TOP_SCORE);
         hits.truncate(limit);
         Ok(hits)
     }

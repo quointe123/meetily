@@ -38,9 +38,19 @@ const WORD_REGEX = /[\p{L}\p{N}]+/gu;
 export const HIGHLIGHT_FUZZY_THRESHOLD = 0.82;
 
 /**
- * Does any of `terms` fuzzy-match `word`? Matches if exact/substring OR
- * Levenshtein ratio ≥ threshold. Terms shorter than 3 chars only accept
- * exact matches — too short for fuzzy to be meaningful.
+ * Does any of `terms` fuzzy-match `word`? Matches if:
+ *  - exact (case-insensitive), OR
+ *  - word contains term as a substring (plural / inflected forms — "amazons"
+ *    highlights on query "amazon"), OR
+ *  - Levenshtein ratio ≥ threshold, gated on minimum length of *both* sides.
+ *
+ * The reverse-substring check (term contains word) is intentionally absent:
+ * it caused false positives like query "Louis" highlighting "Oui" (because
+ * "Louis" contains the chars O-U-I) or "l'" (because "Louis" starts with l).
+ * Plural/inflected forms go through the one-way check and Levenshtein instead.
+ *
+ * The ≥ 4 char gate for fuzzy prevents 3-char words ("oui", "dev", "not") from
+ * matching 5-6 char queries purely because the sum of lengths is small.
  */
 export function wordMatchesAnyTerm(
   word: string,
@@ -52,9 +62,11 @@ export function wordMatchesAnyTerm(
     const lowerTerm = term.toLowerCase();
     if (lowerTerm.length === 0) return false;
     if (lowerWord === lowerTerm) return true;
-    if (lowerWord.includes(lowerTerm) || lowerTerm.includes(lowerWord)) return true;
-    if (lowerTerm.length < 3) return false;
-    // Length guard: giant length mismatch is never a real fuzzy hit.
+    // Only word-contains-term, not the reverse. See doc comment.
+    if (lowerTerm.length >= 3 && lowerWord.includes(lowerTerm)) return true;
+    // Fuzzy requires both sides ≥ 4 chars — short words are too information-poor
+    // for a high ratio to be meaningful.
+    if (lowerTerm.length < 4 || lowerWord.length < 4) return false;
     if (Math.abs(lowerWord.length - lowerTerm.length) > 3) return false;
     return levenshteinRatio(lowerWord, lowerTerm) >= threshold;
   });
