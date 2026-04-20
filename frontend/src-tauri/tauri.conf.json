@@ -72,7 +72,6 @@
                                 }
                             ]
                         },
-                        "shell:default",
                         {
                             "identifier": "shell:allow-open",
                             "allow": [
