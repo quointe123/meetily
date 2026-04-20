@@ -51,9 +51,18 @@ export async function saveViaDialog(filename: string, content: Blob | string): P
 }
 
 export async function openContainingFolder(fullPath: string): Promise<void> {
-  // `open` with a directory path opens the OS file browser at that location.
-  // On Windows this is Explorer, on macOS Finder, on Linux the default file manager.
   const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'));
   const dir = lastSep > 0 ? fullPath.slice(0, lastSep) : fullPath;
-  await open(dir);
+  console.log('[export] openContainingFolder — fullPath:', JSON.stringify(fullPath));
+  console.log('[export] openContainingFolder — dir being opened:', JSON.stringify(dir));
+  try {
+    await open(dir);
+    console.log('[export] openContainingFolder — open() resolved OK');
+  } catch (err: any) {
+    console.error('[export] openContainingFolder — open() threw:', err);
+    console.error('[export] openContainingFolder — err.message:', err?.message);
+    console.error('[export] openContainingFolder — err.name:', err?.name);
+    console.error('[export] openContainingFolder — err stringified:', JSON.stringify(err, Object.getOwnPropertyNames(err ?? {})));
+    throw err;
+  }
 }

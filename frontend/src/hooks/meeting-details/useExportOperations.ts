@@ -84,9 +84,11 @@ export function useExportOperations({
           action: {
             label: 'Ouvrir le dossier',
             onClick: () => {
-              openContainingFolder(result.fullPath).catch(() =>
-                toast.error("Impossible d'ouvrir le dossier"),
-              );
+              openContainingFolder(result.fullPath).catch((err: any) => {
+                const detail = err?.message ?? String(err);
+                console.error('[export] open folder action failed:', err);
+                toast.error(`Impossible d'ouvrir le dossier : ${detail}`);
+              });
             },
           },
         });
