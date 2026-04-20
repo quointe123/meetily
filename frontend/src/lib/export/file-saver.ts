@@ -1,6 +1,6 @@
 import { writeFile, exists } from '@tauri-apps/plugin-fs';
 import { downloadDir, join } from '@tauri-apps/api/path';
-import { open } from '@tauri-apps/plugin-shell';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { ExportResult } from './types';
 
 async function uniquePath(dir: string, filename: string): Promise<{ path: string; finalName: string }> {
@@ -51,18 +51,8 @@ export async function saveViaDialog(filename: string, content: Blob | string): P
 }
 
 export async function openContainingFolder(fullPath: string): Promise<void> {
-  const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'));
-  const dir = lastSep > 0 ? fullPath.slice(0, lastSep) : fullPath;
-  console.log('[export] openContainingFolder — fullPath:', JSON.stringify(fullPath));
-  console.log('[export] openContainingFolder — dir being opened:', JSON.stringify(dir));
-  try {
-    await open(dir);
-    console.log('[export] openContainingFolder — open() resolved OK');
-  } catch (err: any) {
-    console.error('[export] openContainingFolder — open() threw:', err);
-    console.error('[export] openContainingFolder — err.message:', err?.message);
-    console.error('[export] openContainingFolder — err.name:', err?.name);
-    console.error('[export] openContainingFolder — err stringified:', JSON.stringify(err, Object.getOwnPropertyNames(err ?? {})));
-    throw err;
-  }
+  // revealItemInDir opens the OS file manager at the parent directory of the
+  // given file and highlights it (Explorer on Windows, Finder on macOS,
+  // default file manager on Linux).
+  await revealItemInDir(fullPath);
 }
