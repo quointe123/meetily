@@ -76,7 +76,7 @@
                         {
                             "identifier": "shell:allow-open",
                             "allow": [
-                                { "path": "**" }
+                                { "validator": ".+" }
                             ]
                         }
                     ]
