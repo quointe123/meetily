@@ -26,7 +26,7 @@
       "size_mb": 3109,
       "template": "gemma3",
       "context_size": 32768,
-      "layer_count": 30,
+      "layer_count": 35,
       "sampling": {
         "temperature": 1.0,
         "top_k": 64,
