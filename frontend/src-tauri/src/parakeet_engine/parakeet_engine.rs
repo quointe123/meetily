@@ -1,9 +1,10 @@
 use crate::parakeet_engine::model::ParakeetModel;
+use crate::parakeet_engine::sidecar::ParakeetSidecar;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::fs;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use std::time::{Duration, Instant};
@@ -119,6 +120,17 @@ pub struct ParakeetEngine {
     cancel_download_flag: Arc<RwLock<Option<String>>>, // Model name being cancelled
     // Active downloads tracking to prevent concurrent downloads
     pub(crate) active_downloads: Arc<RwLock<HashSet<String>>>, // Set of models currently being downloaded
+    // Python sidecar running the reference onnx_asr TDT decoder.
+    //
+    // Wrapped in a blocking `std::sync::Mutex` because `ParakeetSidecar` is
+    // `!Send + !Sync` — it owns process handles that can't be shared freely.
+    // We never hold this guard across an `.await`, so the blocking mutex is
+    // safe within our async fns.
+    //
+    // `None` means the sidecar is not available (Python missing, spawn failed,
+    // or onnx_asr not installed). In that case `transcribe_audio` transparently
+    // falls back to the custom Rust decoder in `model.rs`.
+    sidecar: StdMutex<Option<ParakeetSidecar>>,
 }
 
 impl ParakeetEngine {
@@ -160,7 +172,107 @@ impl ParakeetEngine {
             cancel_download_flag: Arc::new(RwLock::new(None)),
             // Initialize active downloads tracking
             active_downloads: Arc::new(RwLock::new(HashSet::new())),
+            // Sidecar is lazy-spawned on first successful load_model.
+            sidecar: StdMutex::new(None),
         })
+    }
+
+    /// Resolve the on-disk path of `parakeet_helper.py`.
+    ///
+    /// Baked in at compile time from `CARGO_MANIFEST_DIR`, which points at
+    /// `frontend/src-tauri`. This works for `cargo run` / `tauri dev` and for
+    /// installer builds that preserve the `sidecars/parakeet-helper/` layout
+    /// relative to the executable's resource directory. Production packaging
+    /// that relocates the helper will need to override this path.
+    fn helper_script_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("sidecars")
+            .join("parakeet-helper")
+            .join("parakeet_helper.py")
+    }
+
+    /// Resolve the onnx-asr model id from the local model directory name.
+    ///
+    /// The directory names in our catalog embed the version (e.g.
+    /// `parakeet-tdt-0.6b-v3-int8`). onnx-asr expects a published model id
+    /// like `nemo-parakeet-tdt-0.6b-v3`.
+    fn resolve_onnx_asr_model_id(model_name: &str) -> &'static str {
+        if model_name.contains("v3") {
+            "nemo-parakeet-tdt-0.6b-v3"
+        } else if model_name.contains("v2") {
+            "nemo-parakeet-tdt-0.6b-v2"
+        } else {
+            // Reasonable default — v3 is the current recommended model.
+            "nemo-parakeet-tdt-0.6b-v3"
+        }
+    }
+
+    /// Best-effort attempt to spawn the Python sidecar and load the given
+    /// model. Never fails — any error is logged and the sidecar slot is left
+    /// empty so `transcribe_audio` falls back to the custom Rust decoder.
+    fn try_spawn_sidecar(&self, model_dir: &std::path::Path, model_name: &str) {
+        let python = match ParakeetSidecar::locate_python() {
+            Ok(p) => p,
+            Err(e) => {
+                log::warn!(
+                    "Parakeet sidecar not available: {}. Falling back to custom Rust decoder.",
+                    e
+                );
+                return;
+            }
+        };
+
+        let helper = Self::helper_script_path();
+        if !helper.exists() {
+            log::warn!(
+                "Parakeet helper script not found at {}; falling back to custom Rust decoder.",
+                helper.display()
+            );
+            return;
+        }
+
+        let mut sc = match ParakeetSidecar::spawn(&python, &helper) {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!(
+                    "Parakeet sidecar spawn failed: {}. Falling back to custom Rust decoder.",
+                    e
+                );
+                return;
+            }
+        };
+
+        let model_id = Self::resolve_onnx_asr_model_id(model_name);
+        // On-disk files are always int8 right now; the catalog entry's
+        // quantization is informational for UI only.
+        let quantization = "int8";
+
+        if let Err(e) = sc.load_model(model_dir, model_id, quantization) {
+            log::warn!(
+                "Parakeet sidecar load_model({}) failed: {}. Falling back to custom Rust decoder.",
+                model_id,
+                e
+            );
+            let _ = sc.shutdown();
+            return;
+        }
+
+        log::info!(
+            "Parakeet sidecar ready: model_id={} quantization={} dir={}",
+            model_id,
+            quantization,
+            model_dir.display()
+        );
+
+        // Replace whatever was there. If a previous sidecar existed, drop it
+        // first so its shutdown runs before we install the new one.
+        let mut guard = self.sidecar.lock().unwrap();
+        if let Some(mut old) = guard.take() {
+            if let Err(e) = old.shutdown() {
+                log::warn!("Previous Parakeet sidecar shutdown error: {}", e);
+            }
+        }
+        *guard = Some(sc);
     }
 
     /// Discover available Parakeet models
@@ -400,6 +512,13 @@ impl ParakeetEngine {
                     model_name,
                     if quantized { "Int8 quantized" } else { "FP32" }
                 );
+
+                // Best-effort: spin up the Python sidecar with the reference
+                // TDT decoder. If this fails for any reason (missing Python,
+                // missing onnx_asr, spawn error, slow model init) we log and
+                // keep the custom Rust decoder as the fallback.
+                self.try_spawn_sidecar(&model_info.path, model_name);
+
                 Ok(())
             }
             ModelStatus::Missing => {
@@ -428,6 +547,18 @@ impl ParakeetEngine {
         let mut model_name_guard = self.current_model_name.write().await;
         model_name_guard.take();
 
+        // Shut down the Python sidecar if it was running. This is best-effort:
+        // failures are logged but don't change the unload result.
+        let taken = {
+            let mut guard = self.sidecar.lock().unwrap();
+            guard.take()
+        };
+        if let Some(mut sc) = taken {
+            if let Err(e) = sc.shutdown() {
+                log::warn!("Parakeet sidecar shutdown error: {}", e);
+            }
+        }
+
         unloaded
     }
 
@@ -441,13 +572,13 @@ impl ParakeetEngine {
         self.current_model.read().await.is_some()
     }
 
-    /// Transcribe audio samples using the loaded Parakeet model
+    /// Transcribe audio samples using the loaded Parakeet model.
+    ///
+    /// If the Python sidecar is available (onnx-asr reference decoder), it is
+    /// tried first. On any sidecar error we transparently fall back to the
+    /// custom Rust TDT decoder in `model.rs`, so transcription never hard-
+    /// fails just because of a sidecar glitch.
     pub async fn transcribe_audio(&self, audio_data: Vec<f32>) -> Result<String> {
-        let mut model_guard = self.current_model.write().await;
-        let model = model_guard
-            .as_mut()
-            .ok_or_else(|| anyhow!("No Parakeet model loaded. Please load a model first."))?;
-
         let duration_seconds = audio_data.len() as f64 / 16000.0; // Assuming 16kHz
         log::debug!(
             "Parakeet transcribing {} samples ({:.1}s duration)",
@@ -455,7 +586,48 @@ impl ParakeetEngine {
             duration_seconds
         );
 
-        // Transcribe using Parakeet model
+        // Try the Python sidecar first. IMPORTANT: the blocking `StdMutex`
+        // guard must not be held across an `.await`. The call below is itself
+        // synchronous (it IPCs to the sidecar and returns), and we drop the
+        // guard as soon as the scope ends, before any later `.await`.
+        //
+        // Language hint is hardcoded to "fr" for now. Parakeet v3 ignores it
+        // but it's cheap; a later task will plumb the UI language selector.
+        let sidecar_result: Option<Result<Vec<crate::parakeet_engine::sidecar::TranscriptSegment>>> = {
+            let mut guard = self.sidecar.lock().unwrap();
+            guard.as_mut().map(|sc| sc.transcribe(&audio_data, Some("fr")))
+        };
+
+        if let Some(res) = sidecar_result {
+            match res {
+                Ok(segments) => {
+                    let text = segments
+                        .into_iter()
+                        .map(|s| s.text)
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    log::debug!(
+                        "Parakeet sidecar transcription: '{}'",
+                        text.chars().take(80).collect::<String>()
+                    );
+                    return Ok(text);
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Parakeet sidecar transcription failed, falling back to custom decoder: {}",
+                        e
+                    );
+                    // Fall through to custom decoder below.
+                }
+            }
+        }
+
+        // Fallback: custom Rust TDT decoder.
+        let mut model_guard = self.current_model.write().await;
+        let model = model_guard
+            .as_mut()
+            .ok_or_else(|| anyhow!("No Parakeet model loaded. Please load a model first."))?;
+
         let result = model
             .transcribe_samples(audio_data)
             .map_err(|e| anyhow!("Parakeet transcription failed: {}", e))?;
