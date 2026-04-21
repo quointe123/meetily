@@ -3,6 +3,7 @@ pub mod audio_processing;
 pub mod decoder;
 pub mod encode;
 pub mod ffmpeg;
+pub mod language_filter;
 pub mod normalize;
 pub mod vad;
 

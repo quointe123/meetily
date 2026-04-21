@@ -391,16 +391,26 @@ async fn run_retranscription<R: Runtime>(
 
         // Skip empty transcripts
         let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            debug!(
-                "Segment {}/{}: {:.1}s, conf={:.2}, text='{}'",
-                i + 1, processable_count, segment_duration_sec, conf,
-                if trimmed.len() > 80 { let mut end = 80; while !trimmed.is_char_boundary(end) { end -= 1; } &trimmed[..end] } else { trimmed }
-            );
-            all_transcripts.push((text, segment.start_timestamp_ms, segment.end_timestamp_ms));
-            total_confidence += conf;
-        } else {
+        if trimmed.is_empty() {
             debug!("Segment {}/{}: {:.1}s — empty transcription", i + 1, processable_count, segment_duration_sec);
+        } else {
+            let lang_check = crate::audio::language_filter::check_language(trimmed, language.as_deref());
+            if lang_check == crate::audio::language_filter::LanguageCheck::Mismatch {
+                log::info!(
+                    "Segment {}/{}: {:.1}s — dropped (language mismatch vs expected={:?}), text='{}'",
+                    i + 1, processable_count, segment_duration_sec, language,
+                    if trimmed.len() > 80 { let mut end = 80; while !trimmed.is_char_boundary(end) { end -= 1; } &trimmed[..end] } else { trimmed }
+                );
+                // Do not push to all_transcripts and do not count in confidence.
+            } else {
+                debug!(
+                    "Segment {}/{}: {:.1}s, conf={:.2}, lang_check={:?}, text='{}'",
+                    i + 1, processable_count, segment_duration_sec, conf, lang_check,
+                    if trimmed.len() > 80 { let mut end = 80; while !trimmed.is_char_boundary(end) { end -= 1; } &trimmed[..end] } else { trimmed }
+                );
+                all_transcripts.push((text, segment.start_timestamp_ms, segment.end_timestamp_ms));
+                total_confidence += conf;
+            }
         }
     }
 
