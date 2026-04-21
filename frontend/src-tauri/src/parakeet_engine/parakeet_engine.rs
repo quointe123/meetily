@@ -168,18 +168,25 @@ impl ParakeetEngine {
         let models_dir = &self.models_dir;
         let mut models = Vec::new();
 
-        // Parakeet model configurations
-        // Model name format: parakeet-tdt-0.6b-v{version}-{quantization}
-        // Sizes match actual download sizes (encoder + decoder + preprocessor + vocab)
-        let model_configs = [
-            ("parakeet-tdt-0.6b-v3-int8", 670, QuantizationType::Int8, "Ultra Fast (v3)", "Real time on M4 Max, latest version with int8 quantization"),
-            ("parakeet-tdt-0.6b-v2-int8", 661, QuantizationType::Int8, "Fast (v2)", "Previous version with int8 quantization, good balance of speed and accuracy"),
-        ];
+        let catalog_entries = &crate::models_catalog::get().stt_parakeet;
 
         // Get active downloads to override status
         let active_downloads = self.active_downloads.read().await;
 
-        for (name, size_mb, quantization, speed, description) in model_configs {
+        for entry in catalog_entries {
+            let name: &str = &entry.id;
+            let size_mb: u32 = entry.size_mb;
+            let quantization = match entry.quantization.as_str() {
+                "int8" => QuantizationType::Int8,
+                "fp32" => QuantizationType::FP32,
+                other => {
+                    log::warn!("unknown Parakeet quantization '{}' for {}; skipping", other, name);
+                    continue;
+                }
+            };
+            let speed: &str = &entry.speed;
+            let description: &str = &entry.description;
+            let required_files: Vec<&str> = entry.files.iter().map(|s| s.as_str()).collect();
             let model_path = models_dir.join(name);
 
             // Check if model is currently downloading
@@ -189,22 +196,6 @@ impl ParakeetEngine {
                 // The progress events will update the UI
                 ModelStatus::Downloading { progress: 0 }
             } else if model_path.exists() {
-                // Check for required ONNX files
-                let required_files = match quantization {
-                    QuantizationType::Int8 => vec![
-                        "encoder-model.int8.onnx",
-                        "decoder_joint-model.int8.onnx",
-                        "nemo128.onnx",
-                        "vocab.txt",
-                    ],
-                    QuantizationType::FP32 => vec![
-                        "encoder-model.onnx",
-                        "decoder_joint-model.onnx",
-                        "nemo128.onnx",
-                        "vocab.txt",
-                    ],
-                };
-
                 let all_files_exist = required_files.iter().all(|file| {
                     model_path.join(file).exists()
                 });
@@ -590,29 +581,13 @@ impl ParakeetEngine {
             }
         }
 
-        // HuggingFace base URL for Parakeet models (version-specific)
-        let base_url = if model_name.contains("-v2-") {
-            "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main"
-        } else {
-            // Default to v3 for v3 models
-            "https://meetily.towardsgeneralintelligence.com/models/parakeet-tdt-0.6b-v3-onnx"
-        };
-
-        // Determine which files to download based on quantization
-        let files_to_download = match model_info.quantization {
-            QuantizationType::Int8 => vec![
-                "encoder-model.int8.onnx",
-                "decoder_joint-model.int8.onnx",
-                "nemo128.onnx",
-                "vocab.txt",
-            ],
-            QuantizationType::FP32 => vec![
-                "encoder-model.onnx",
-                "decoder_joint-model.onnx",
-                "nemo128.onnx",
-                "vocab.txt",
-            ],
-        };
+        let catalog_entry = crate::models_catalog::get()
+            .stt_parakeet
+            .iter()
+            .find(|e| e.id == model_name)
+            .ok_or_else(|| anyhow!("Parakeet model {} not in catalog", model_name))?;
+        let base_url: &str = &catalog_entry.base_url;
+        let files_to_download: Vec<&str> = catalog_entry.files.iter().map(|s| s.as_str()).collect();
 
         // Create model directory
         let model_dir = &model_info.path;
