@@ -37,26 +37,22 @@ impl ContinuousVadProcessor {
         let mut config = VadConfig::default();
         config.sample_rate = VAD_SAMPLE_RATE as usize;
 
-        // CONTINUOUS SPEECH FIX: Tuned for capturing complete 5+ second utterances
-        // Previous: 0.55/0.40 with 400ms redemption was fragmenting speech into 40ms segments
-        // New: More lenient thresholds + longer redemption for continuous speech
-        config.positive_speech_threshold = 0.50;  // Silero default - good for continuous speech
-        config.negative_speech_threshold = 0.35;  // Silero default - allows natural pauses
+        // RECALL-FIRST TUNING: captures soft speech + short interjections
+        // Prior: 0.50/0.35 with min_speech=250ms missed ~75% of speech in noisy meeting audio
+        // New: thresholds lowered per Silero wiki "missing speech" guidance;
+        // min_speech reduced to catch short "oui", "non" etc.
+        config.positive_speech_threshold = 0.40;  // was 0.50 — more sensitive to soft/distant speech
+        config.negative_speech_threshold = 0.25;  // was 0.35 — slower to declare silence
 
-        // CRITICAL FIX: Removed redemption_time capping to support long continuous speech
-        // Previous: capped at 400ms, causing VAD to fragment 5-second speech into 40ms segments
-        // New: Use full redemption_time from pipeline (2000ms) to bridge natural pauses
         config.redemption_time = Duration::from_millis(redemption_time_ms as u64);
-        config.pre_speech_pad = Duration::from_millis(300);   // Pre-speech padding for context
-        config.post_speech_pad = Duration::from_millis(400);  // Increased: more context at end
+        config.pre_speech_pad = Duration::from_millis(400);   // was 300 — more context at start
+        config.post_speech_pad = Duration::from_millis(500);  // was 400 — more context at end
 
-        // CRITICAL FIX: Increased min_speech_time to prevent tiny 40ms fragments
-        // Previous: 100ms allowed too-short segments that Whisper rejects
-        // New: 250ms ensures segments are substantial enough for Whisper (>100ms requirement)
-        config.min_speech_time = Duration::from_millis(250);  // Prevent tiny fragments
+        // Short interjections ("oui", "non", "ok") need min_speech < 200ms
+        config.min_speech_time = Duration::from_millis(150);  // was 250
 
         debug!("Creating VAD session with: sample_rate={}Hz, redemption={}ms, min_speech={}ms, input_rate={}Hz",
-               VAD_SAMPLE_RATE, redemption_time_ms, 250, input_sample_rate);
+               VAD_SAMPLE_RATE, redemption_time_ms, 150, input_sample_rate);
 
         let session = VadSession::new(config)
             .map_err(|e| anyhow!("Failed to create VAD session: {:?}", e))?;
