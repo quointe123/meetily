@@ -121,16 +121,20 @@ pub fn check_language(transcript: &str, expected_lang: Option<&str>) -> Language
         }
     }
 
-    // If neither side fired, we can't tell — treat as a match.
-    if expected_hits == 0 && foreign_hits == 0 {
+    // A single foreign accent can come from a proper noun (e.g. "São Paulo"
+    // in a French sentence). Require at least 2 foreign hits before we'll
+    // ever flag — this absorbs the single-proper-noun false positive.
+    if foreign_hits < 2 {
         return LanguageCheck::Match;
     }
 
-    // Strong foreign signal with weak native signal → mismatch.
-    if expected_hits == 0 && foreign_hits >= 2 {
+    // 2+ foreign hits and zero native signal → unambiguous mismatch.
+    if expected_hits == 0 {
         return LanguageCheck::Mismatch;
     }
 
+    // Otherwise rely on the ratio: foreign must dominate native by the
+    // configured factor to count as mismatched.
     if foreign_hits as f32 > expected_hits as f32 * FOREIGN_RATIO_THRESHOLD {
         LanguageCheck::Mismatch
     } else {
@@ -181,6 +185,22 @@ mod tests {
         assert_eq!(iso_base("fr-FR"), "fr");
         assert_eq!(iso_base("en-US"), "en");
         assert_eq!(iso_base("FR"), "fr");
+    }
+
+    #[test]
+    fn single_foreign_accent_from_proper_noun_is_not_flagged() {
+        // ASCII-only French content with a single foreign-language accent
+        // from a proper noun must NOT be dropped — requires ≥2 foreign hits.
+        let text = "Nous allons parler de So Paulo pendant la prochaine heure avec Martin.";
+        let text_with_accent = text.replace("So", "São");
+        assert_eq!(check_language(&text_with_accent, Some("fr")), LanguageCheck::Match);
+    }
+
+    #[test]
+    fn two_proper_noun_accents_with_strong_french_content_still_matches() {
+        // Even two foreign accents pass if French accents dominate (ratio test).
+        let text = "J'ai visité São Paulo et Ñuño pendant mes vacances d'été très agréables.";
+        assert_eq!(check_language(text, Some("fr")), LanguageCheck::Match);
     }
 
     #[test]
