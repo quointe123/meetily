@@ -35,7 +35,7 @@ pub struct ModelDef {
     /// Display name for UI (e.g., "Gemma 3 1B (Fast)")
     pub display_name: String,
 
-    /// GGUF filename on disk (e.g., "gemma-3-1b-it-q4_0.gguf")
+    /// GGUF filename on disk (e.g., "gemma-3-1b-it-Q8_0.gguf")
     pub gguf_file: String,
 
     /// Template name for prompt formatting (e.g., "gemma3")

@@ -922,17 +922,16 @@ impl WhisperEngine {
             *cancel_flag = None;
         }
 
-        let model_url = crate::models_catalog::get()
+        // Resolve download URL AND filename from the central catalog
+        let entry = crate::models_catalog::get()
             .stt_whisper
             .iter()
             .find(|e| e.id == model_name)
-            .map(|e| e.download_url.as_str())
             .ok_or_else(|| anyhow!("Unsupported model: {}", model_name))?;
-        
+        let model_url = entry.download_url.as_str();
+        let filename = entry.filename.clone();
+
         log::info!("Model URL for {}: {}", model_name, model_url);
-        
-        // Generate correct filename - all models follow ggml-{model_name}.bin pattern
-        let filename = format!("ggml-{}.bin", model_name);
         let file_path = self.models_dir.join(&filename);
         
         log::info!("Downloading to file path: {}", file_path.display());
@@ -1110,7 +1109,12 @@ impl WhisperEngine {
         // Clean up partially downloaded files
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await; // Brief delay to let download loop detect cancellation
 
-        let filename = format!("ggml-{}.bin", model_name);
+        let filename = crate::models_catalog::get()
+            .stt_whisper
+            .iter()
+            .find(|e| e.id == model_name)
+            .map(|e| e.filename.clone())
+            .ok_or_else(|| anyhow!("Unsupported model: {}", model_name))?;
         let file_path = self.models_dir.join(&filename);
         if file_path.exists() {
             if let Err(e) = fs::remove_file(&file_path).await {

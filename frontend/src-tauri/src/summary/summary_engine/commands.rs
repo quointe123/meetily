@@ -313,7 +313,7 @@ pub async fn builtin_ai_get_available_summary_model<R: Runtime>(
         .filter(|m| matches!(m.status, crate::summary::summary_engine::model_manager::ModelStatus::Available))
         .max_by_key(|m| {
             match m.name.as_str() {
-                "gemma3:4b" => 2,
+                "gemma4:e2b" => 2,
                 "gemma3:1b" => 1,
                 _ => 0,
             }
@@ -356,23 +356,19 @@ pub async fn init_model_manager_at_startup<R: Runtime>(
 
 
 /// Get recommended summary model based on platform and system RAM
-/// macOS + >16GB RAM → gemma3:4b (2.5 GB, balanced)
-/// Otherwise → gemma3:1b (1019 MB, fast)
+/// macOS + >16GB RAM → gemma4:e2b (~3.1 GB, best quality)
+/// Otherwise → gemma3:1b (~1 GB, fast)
 #[tauri::command]
 pub async fn builtin_ai_get_recommended_model() -> Result<String, String> {
-    // Get system RAM in GB
     let system_ram_gb = get_system_ram_gb()?;
-
-    // Check if running on macOS
     let is_macos = cfg!(target_os = "macos");
 
     log::info!("System RAM detected: {} GB, Platform: {}", system_ram_gb, if is_macos { "macOS" } else { "other" });
 
-    // Recommend model: gemma3:4b only on macOS with >16GB RAM
     let recommended = if is_macos && system_ram_gb > 16 {
-        "gemma3:4b"       // macOS + >16GB RAM: gemma3:4b (2.5 GB, balanced)
+        "gemma4:e2b"
     } else {
-        "gemma3:1b"       // All other cases: gemma3:1b (806 MB, fast)
+        "gemma3:1b"
     };
 
     log::info!("Recommended summary model: {} (macOS={}, {}GB RAM)", recommended, is_macos, system_ram_gb);

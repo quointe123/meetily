@@ -271,7 +271,7 @@ export function DownloadProgressStep() {
       error?: string;
     }>('builtin-ai-download-progress', (event) => {
       const { model, progress, downloaded_mb, total_mb, speed_mbps, status, error } = event.payload;
-      if (model === selectedSummaryModel || model === 'gemma3:1b' || model === 'gemma3:4b') {
+      if (model === selectedSummaryModel || model === 'gemma3:1b' || model === 'gemma4:e2b') {
         setGemmaState((prev) => ({
           ...prev,
           status: status === 'completed'
@@ -483,7 +483,7 @@ export function DownloadProgressStep() {
             'Summary Engine',
             <Sparkles className="w-5 h-5 text-gray-600" />,
             gemmaState,
-            recommendedModel === 'gemma3:4b' ? '~2.5 GB' : '~806 MB'
+            recommendedModel === 'gemma4:e2b' ? '~3.1 GB' : '~1 GB'
           )}
 
           {renderDownloadCard(

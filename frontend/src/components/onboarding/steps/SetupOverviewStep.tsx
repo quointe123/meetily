@@ -23,7 +23,7 @@ export function SetupOverviewStep() {
       try {
         const model = await invoke<string>('builtin_ai_get_recommended_model');
         setRecommendedModel(model);
-        setModelSize(model === 'gemma3:4b' ? '~2.5 GB' : '~806 MB');
+        setModelSize(model === 'gemma4:e2b' ? '~3.1 GB' : '~1 GB');
       } catch (error) {
         console.error('Failed to get recommended model:', error);
         // Keep default gemma3:1b
