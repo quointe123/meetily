@@ -1,0 +1,4 @@
+# Reference TDT decoder + Silero VAD. `hub` extra lets onnx-asr auto-download
+# the Silero VAD weights on first use. `cpu` pins onnxruntime (non-GPU).
+onnx-asr[cpu,hub]>=0.7.0
+numpy>=1.24
