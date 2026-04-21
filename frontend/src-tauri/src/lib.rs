@@ -40,6 +40,7 @@ pub mod audio;
 pub mod config;
 pub mod console_utils;
 pub mod database;
+pub mod models_catalog;
 pub mod notifications;
 pub mod ollama;
 pub mod onboarding;
@@ -403,6 +404,9 @@ pub fn run() {
         .manage(audio::init_system_audio_state())
         .manage(summary::summary_engine::ModelManagerState(Arc::new(tokio::sync::Mutex::new(None))))
         .setup(|_app| {
+            crate::models_catalog::init(_app.handle())
+                .map_err(|e| format!("failed to initialize model catalog: {}", e))?;
+
             log::info!("Application setup complete");
 
             // Initialize system tray

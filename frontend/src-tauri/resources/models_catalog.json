@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "llm": [
+    {
+      "id": "gemma3:1b",
+      "display_name": "Gemma 3 1B (Fast)",
+      "gguf_file": "gemma-3-1b-it-Q8_0.gguf",
+      "download_url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf",
+      "size_mb": 1019,
+      "template": "gemma3",
+      "context_size": 32768,
+      "layer_count": 26,
+      "sampling": {
+        "temperature": 1.0,
+        "top_k": 64,
+        "top_p": 0.95,
+        "stop_tokens": ["<end_of_turn>"]
+      },
+      "description": "Fastest model. Runs on any hardware with ~1GB RAM. Good for quick summaries."
+    },
+    {
+      "id": "gemma4:e2b",
+      "display_name": "Gemma 4 E2B (Quality)",
+      "gguf_file": "gemma-4-E2B-it-Q4_K_M.gguf",
+      "download_url": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
+      "size_mb": 3109,
+      "template": "gemma3",
+      "context_size": 32768,
+      "layer_count": 30,
+      "sampling": {
+        "temperature": 1.0,
+        "top_k": 64,
+        "top_p": 0.95,
+        "stop_tokens": ["<end_of_turn>"]
+      },
+      "description": "Latest Gemma model. ~3.1 GB on disk, needs ~4 GB RAM. Best quality."
+    }
+  ],
+  "stt_whisper": [
+    { "id": "tiny", "filename": "ggml-tiny.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin", "size_mb": 74, "accuracy": "Decent", "speed": "Very Fast", "description": "Fastest processing, good for real-time use" },
+    { "id": "base", "filename": "ggml-base.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin", "size_mb": 142, "accuracy": "Good", "speed": "Fast", "description": "Good balance of speed and accuracy" },
+    { "id": "small", "filename": "ggml-small.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin", "size_mb": 466, "accuracy": "Good", "speed": "Medium", "description": "Better accuracy, moderate speed" },
+    { "id": "medium", "filename": "ggml-medium.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin", "size_mb": 1463, "accuracy": "High", "speed": "Slow", "description": "High accuracy for professional use" },
+    { "id": "large-v3-turbo", "filename": "ggml-large-v3-turbo.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin", "size_mb": 1549, "accuracy": "High", "speed": "Medium", "description": "Best accuracy with improved speed" },
+    { "id": "large-v3", "filename": "ggml-large-v3.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin", "size_mb": 2951, "accuracy": "High", "speed": "Slow", "description": "Most Accurate, latest large model" },
+    { "id": "tiny-q5_1", "filename": "ggml-tiny-q5_1.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin", "size_mb": 31, "accuracy": "Decent", "speed": "Very Fast", "description": "Quantized tiny model, ~50% faster processing" },
+    { "id": "base-q5_1", "filename": "ggml-base-q5_1.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin", "size_mb": 57, "accuracy": "Good", "speed": "Fast", "description": "Quantized base model, good speed/accuracy balance" },
+    { "id": "small-q5_1", "filename": "ggml-small-q5_1.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin", "size_mb": 181, "accuracy": "Good", "speed": "Fast", "description": "Quantized small model, faster than f16 version" },
+    { "id": "medium-q5_0", "filename": "ggml-medium-q5_0.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin", "size_mb": 514, "accuracy": "High", "speed": "Medium", "description": "Quantized medium model, professional quality" },
+    { "id": "large-v3-turbo-q5_0", "filename": "ggml-large-v3-turbo-q5_0.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin", "size_mb": 547, "accuracy": "High", "speed": "Medium", "description": "Quantized large model, best balance" },
+    { "id": "large-v3-q5_0", "filename": "ggml-large-v3-q5_0.bin", "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin", "size_mb": 1031, "accuracy": "High", "speed": "Slow", "description": "Quantized large model, high accuracy" }
+  ],
+  "stt_parakeet": [
+    {
+      "id": "parakeet-tdt-0.6b-v3-int8",
+      "base_url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main",
+      "files": ["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "nemo128.onnx", "vocab.txt"],
+      "size_mb": 670,
+      "quantization": "int8",
+      "version": "v3",
+      "speed": "Ultra Fast (v3)",
+      "description": "Real time on M4 Max, latest version with int8 quantization"
+    },
+    {
+      "id": "parakeet-tdt-0.6b-v2-int8",
+      "base_url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main",
+      "files": ["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "nemo128.onnx", "vocab.txt"],
+      "size_mb": 661,
+      "quantization": "int8",
+      "version": "v2",
+      "speed": "Fast (v2)",
+      "description": "Previous version with int8 quantization, good balance of speed and accuracy"
+    }
+  ]
+}
