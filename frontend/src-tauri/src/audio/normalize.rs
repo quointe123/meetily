@@ -25,7 +25,10 @@ const SILENCE_FLOOR: f32 = 0.01;
 pub fn peak_normalize(samples: &mut [f32]) -> f32 {
     let peak = samples.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()));
 
-    if peak <= SILENCE_FLOOR {
+    // Guard against NaN/Inf from corrupted inputs: NaN comparisons are always
+    // false, so `peak <= SILENCE_FLOOR` would fall through and poison the
+    // whole buffer on multiply. Explicit `is_finite()` catches it.
+    if !peak.is_finite() || peak <= SILENCE_FLOOR {
         return 1.0;
     }
 
@@ -71,5 +74,35 @@ mod tests {
         let mut samples: Vec<f32> = vec![];
         let gain = peak_normalize(&mut samples);
         assert_eq!(gain, 1.0);
+    }
+
+    #[test]
+    fn handles_all_zero_buffer() {
+        // Division-by-zero guard: peak == 0.0 hits the silence branch.
+        let mut samples = vec![0.0f32; 16];
+        let gain = peak_normalize(&mut samples);
+        assert_eq!(gain, 1.0);
+        assert!(samples.iter().all(|&s| s == 0.0));
+    }
+
+    #[test]
+    fn handles_all_nan_buffer() {
+        // f32::max ignores NaN, so mixed-NaN falls through to normal
+        // normalization. An all-NaN buffer makes `peak` itself NaN, which
+        // only `is_finite()` catches — without the guard, gain would be NaN
+        // and the multiply would leave every sample as NaN.
+        let mut samples = vec![f32::NAN, f32::NAN];
+        let gain = peak_normalize(&mut samples);
+        assert_eq!(gain, 1.0);
+    }
+
+    #[test]
+    fn handles_inf_peak() {
+        // Same reasoning as the all-NaN case: Inf would produce gain=0
+        // and silently zero out the buffer. Guard prevents that.
+        let mut samples = vec![f32::INFINITY, 0.5];
+        let gain = peak_normalize(&mut samples);
+        assert_eq!(gain, 1.0);
+        assert_eq!(samples[1], 0.5);
     }
 }
