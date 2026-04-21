@@ -156,20 +156,17 @@ def handle_unload() -> dict:
     return {"status": "ok"}
 
 
-def handle_ping(_payload: dict) -> dict:
-    return {"status": "ok", "pong": True, "model_id": _model_id}
-
-
-def handle_unload_cmd(_payload: dict) -> dict:
-    return handle_unload()
-
-
-COMMANDS = {
-    "ping": handle_ping,
-    "load_model": handle_load_model,
-    "transcribe_raw": handle_transcribe_raw,
-    "unload": handle_unload_cmd,
-}
+def dispatch(req: dict) -> dict:
+    cmd = req.get("cmd")
+    if cmd == "ping":
+        return {"status": "ok", "pong": True, "model_id": _model_id}
+    if cmd == "load_model":
+        return handle_load_model(req)
+    if cmd == "transcribe_raw":
+        return handle_transcribe_raw(req)
+    if cmd == "unload":
+        return handle_unload()
+    return {"status": "error", "message": f"unknown command: {cmd!r}"}
 
 
 def main() -> int:
@@ -184,19 +181,13 @@ def main() -> int:
             send({"status": "error", "message": f"invalid JSON: {e}"})
             continue
 
-        cmd = req.get("cmd")
-        if cmd == "shutdown":
+        if req.get("cmd") == "shutdown":
             send({"status": "ok"})
             log("shutdown requested")
             return 0
 
-        handler = COMMANDS.get(cmd)
-        if handler is None:
-            send({"status": "error", "message": f"unknown command: {cmd!r}"})
-            continue
-
         try:
-            resp = handler(req)
+            resp = dispatch(req)
         except Exception as e:  # noqa: BLE001
             resp = {
                 "status": "error",
