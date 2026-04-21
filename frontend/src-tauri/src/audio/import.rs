@@ -585,18 +585,23 @@ async fn run_import<R: Runtime>(
             continue;
         }
 
+        // Normalize peak before ASR — both Parakeet and Whisper benefit from consistent amplitude.
+        let mut samples = segment.samples.clone();
+        let gain = crate::audio::normalize::peak_normalize(&mut samples);
+        log::debug!("Segment {}: peak-normalized with gain={:.2}", i, gain);
+
         // Transcribe
         let (text, conf) = if use_parakeet {
             let engine = parakeet_engine.as_ref().unwrap();
             let text = engine
-                .transcribe_audio(segment.samples.clone())
+                .transcribe_audio(samples)
                 .await
                 .map_err(|e| anyhow!("Parakeet transcription failed on segment {}: {}", i, e))?;
             (text, 0.9f32)
         } else {
             let engine = whisper_engine.as_ref().unwrap();
             let (text, conf, _) = engine
-                .transcribe_audio_with_confidence(segment.samples.clone(), language.clone())
+                .transcribe_audio_with_confidence(samples, language.clone())
                 .await
                 .map_err(|e| anyhow!("Whisper transcription failed on segment {}: {}", i, e))?;
             (text, conf)
@@ -1156,17 +1161,22 @@ async fn run_import_multi<R: Runtime>(
                 ),
             );
 
+            // Normalize peak before ASR — both Parakeet and Whisper benefit from consistent amplitude.
+            let mut samples = segment.samples.clone();
+            let gain = crate::audio::normalize::peak_normalize(&mut samples);
+            log::debug!("File {}, segment {}: peak-normalized with gain={:.2}", file_n, i, gain);
+
             let (text, _conf) = if use_parakeet {
                 let engine = parakeet_engine.as_ref().unwrap();
                 let t = engine
-                    .transcribe_audio(segment.samples.clone())
+                    .transcribe_audio(samples)
                     .await
                     .map_err(|e| anyhow!("Parakeet failed on file {}, seg {}: {}", file_n, i, e))?;
                 (t, 0.9f32)
             } else {
                 let engine = whisper_engine.as_ref().unwrap();
                 let (t, c, _) = engine
-                    .transcribe_audio_with_confidence(segment.samples.clone(), language.clone())
+                    .transcribe_audio_with_confidence(samples, language.clone())
                     .await
                     .map_err(|e| anyhow!("Whisper failed on file {}, seg {}: {}", file_n, i, e))?;
                 (t, c)

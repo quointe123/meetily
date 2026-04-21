@@ -367,18 +367,23 @@ async fn run_retranscription<R: Runtime>(
             continue;
         }
 
+        // Normalize peak before ASR — both Parakeet and Whisper benefit from consistent amplitude.
+        let mut samples = segment.samples.clone();
+        let gain = crate::audio::normalize::peak_normalize(&mut samples);
+        log::debug!("Segment {}: peak-normalized with gain={:.2}", i, gain);
+
         // Transcribe this segment
         let (text, conf) = if use_parakeet {
             let engine = parakeet_engine.as_ref().unwrap();
             let text = engine
-                .transcribe_audio(segment.samples.clone())
+                .transcribe_audio(samples)
                 .await
                 .map_err(|e| anyhow!("Parakeet transcription failed on segment {}: {}", i, e))?;
             (text, 0.9f32)
         } else {
             let engine = whisper_engine.as_ref().unwrap();
             let (text, conf, _) = engine
-                .transcribe_audio_with_confidence(segment.samples.clone(), language.clone())
+                .transcribe_audio_with_confidence(samples, language.clone())
                 .await
                 .map_err(|e| anyhow!("Whisper transcription failed on segment {}: {}", i, e))?;
             (text, conf)
