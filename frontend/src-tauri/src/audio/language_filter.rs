@@ -60,6 +60,16 @@ const MIN_LETTERS_FOR_CHECK: usize = 15;
 /// signatures across ~15+ letters is a strong signal of misclassification.
 const FOREIGN_RATIO_THRESHOLD: f32 = 1.5;
 
+/// Minimum English-stopword density above which we flag the transcript as
+/// English-in-French. Tuned from observed Parakeet v3 hallucinations on
+/// meeting audio — typical English output from v3 on a noisy French chunk
+/// contains 40-60% stopwords, vs ~5-10% in legitimate French content with
+/// borrowed English words.
+const ENGLISH_STOPWORD_DENSITY_THRESHOLD: f32 = 0.30;
+
+/// Tokens count below which the English-stopword check is unreliable.
+const MIN_TOKENS_FOR_STOPWORD_CHECK: usize = 4;
+
 /// Signature characters that are strong indicators of a given language.
 /// Not exhaustive — just the most distinctive markers.
 fn signature_chars(lang: &str) -> &'static [char] {
@@ -72,6 +82,43 @@ fn signature_chars(lang: &str) -> &'static [char] {
         "en" => &[],
         _ => &[],
     }
+}
+
+/// Common English stopwords that would never dominate a French transcript.
+/// Intentionally small and high-precision: picked words that are hallmarks
+/// of English-leaning output (and NOT shared with French vocabulary).
+/// Excludes English words that also appear in French (e.g. "a", "an",
+/// "on") to avoid false positives on legitimate French content.
+const ENGLISH_STOPWORDS: &[&str] = &[
+    "the", "and", "is", "are", "was", "were", "be", "been", "being",
+    "this", "that", "these", "those", "what", "when", "where", "which",
+    "who", "why", "how", "yeah", "okay", "just", "have", "has", "had",
+    "will", "would", "could", "should", "there", "here", "with", "from",
+    "they", "them", "their", "its", "it's", "i'm", "don't", "didn't",
+    "can't", "won't", "you", "your", "my", "me", "we", "us", "our",
+    "going", "gonna", "wanna", "about", "because", "some", "all",
+];
+
+/// Count how many whitespace-separated tokens in the transcript match an
+/// English stopword (case-insensitive, stripped of punctuation).
+fn english_stopword_count(transcript: &str) -> (usize, usize) {
+    let mut stopword_hits = 0usize;
+    let mut total_tokens = 0usize;
+    for raw_token in transcript.split_whitespace() {
+        let cleaned: String = raw_token
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '\'')
+            .collect::<String>()
+            .to_lowercase();
+        if cleaned.is_empty() {
+            continue;
+        }
+        total_tokens += 1;
+        if ENGLISH_STOPWORDS.contains(&cleaned.as_str()) {
+            stopword_hits += 1;
+        }
+    }
+    (stopword_hits, total_tokens)
 }
 
 /// Compare a transcript against the expected language. See module docs.
@@ -89,6 +136,20 @@ pub fn check_language(transcript: &str, expected_lang: Option<&str>) -> Language
     let letter_count = transcript.chars().filter(|c| c.is_alphabetic()).count();
     if letter_count < MIN_LETTERS_FOR_CHECK {
         return LanguageCheck::TooShort;
+    }
+
+    // English-content check only applies when the expected language is
+    // non-English — we try to catch Parakeet v3's English hallucinations on
+    // French audio. Skipped for English expected (trivially passes) and for
+    // other languages where we haven't tuned the threshold.
+    if expected == "fr" {
+        let (stopwords, tokens) = english_stopword_count(transcript);
+        if tokens >= MIN_TOKENS_FOR_STOPWORD_CHECK {
+            let density = stopwords as f32 / tokens as f32;
+            if density >= ENGLISH_STOPWORD_DENSITY_THRESHOLD {
+                return LanguageCheck::Mismatch;
+            }
+        }
     }
 
     let expected_sigs = signature_chars(&expected);
@@ -204,13 +265,42 @@ mod tests {
     }
 
     #[test]
-    fn english_transcript_in_french_context_is_not_flagged() {
-        // We intentionally do NOT flag English content because English and
-        // French share the Latin-1 alphabet with no distinctive signatures
-        // beyond French accents. Dropping English would risk false positives
-        // on ASCII-only French (rare but possible, e.g. code / acronyms).
-        let text = "Let me share the screen with you for a moment please.";
-        // 0 french sigs, 0 foreign sigs => Match (no signal).
+    fn rejects_english_hallucination_in_french_context() {
+        // Parakeet v3 hallucination observed on 20min meeting audio:
+        // "That was a grid. I'm You're gonna-" on a noisy French chunk.
+        // Dense English stopwords + no French accents => Mismatch.
+        let text = "That was a grid. I'm You're gonna have to do it.";
+        assert_eq!(check_language(text, Some("fr")), LanguageCheck::Mismatch);
+    }
+
+    #[test]
+    fn rejects_english_stopword_spam() {
+        // Hallucination pattern: stopwords repeated / clustered.
+        let text = "Yeah yeah yeah, I think you have the screen there.";
+        assert_eq!(check_language(text, Some("fr")), LanguageCheck::Mismatch);
+    }
+
+    #[test]
+    fn french_with_borrowed_english_terms_is_kept() {
+        // Legitimate French content may mention English-origin business
+        // jargon (le dashboard, le meeting, un call) — must NOT be dropped.
+        let text = "On a fait un call avec le client sur le dashboard des KPIs hier soir.";
         assert_eq!(check_language(text, Some("fr")), LanguageCheck::Match);
+    }
+
+    #[test]
+    fn pure_french_without_accents_is_kept() {
+        // ASCII-only French — no accents, no English stopwords.
+        // Should not trigger either filter.
+        let text = "Il faut finir ce travail avant lundi matin sans faute.";
+        assert_eq!(check_language(text, Some("fr")), LanguageCheck::Match);
+    }
+
+    #[test]
+    fn english_expected_still_skipped() {
+        // English as expected language has no signature set, so we skip
+        // — keep the prior behaviour untouched.
+        let text = "Let me share the screen with you for a moment please.";
+        assert_eq!(check_language(text, Some("en")), LanguageCheck::Skipped);
     }
 }

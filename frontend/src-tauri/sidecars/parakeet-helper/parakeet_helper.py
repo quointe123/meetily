@@ -41,14 +41,22 @@ _model_id: str | None = None
 
 def log(msg: str) -> None:
     """Write a diagnostic line to stderr (Rust side surfaces these)."""
-    sys.stderr.write(f"[parakeet-helper] {msg}\n")
-    sys.stderr.flush()
+    try:
+        sys.stderr.write(f"[parakeet-helper] {msg}\n")
+        sys.stderr.flush()
+    except OSError:
+        # Parent closed the pipe. Nothing we can do; don't spam tracebacks.
+        pass
 
 
 def send(obj: dict) -> None:
     """Emit one JSON response line on stdout."""
-    sys.stdout.write(json.dumps(obj) + "\n")
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+    except OSError:
+        # Parent closed stdout (common during shutdown). Swallow quietly.
+        pass
 
 
 def _ensure_config_json(model_dir: Path, model_id: str) -> None:
@@ -99,16 +107,19 @@ def handle_load_model(payload: dict) -> dict:
     # Silero VAD weights on first use if the `hub` extra is installed.
     try:
         vad = onnx_asr.load_vad("silero")
-        # Tuned for recall-first on meeting audio: lower threshold captures
-        # soft speech; max 18s keeps every chunk safely under the ONNX 20s
-        # upper bound; short min_silence avoids stitching distinct utterances.
+        # Precision-first (stricter than Meetily's upstream VAD): Meetily's
+        # Silero already passed these chunks. The job here is to DROP
+        # the false positives that trigger Parakeet v3's "hallucinate a
+        # random language on garbage audio" failure mode observed in the
+        # HF discussion #12 regression. threshold=0.55 + min_speech=300ms
+        # cuts most of that noise.
         _model = _model.with_vad(
             vad,
-            threshold=0.40,
-            neg_threshold=0.25,
-            min_speech_duration_ms=150,
+            threshold=0.55,
+            neg_threshold=0.35,
+            min_speech_duration_ms=300,
             max_speech_duration_s=18,
-            min_silence_duration_ms=100,
+            min_silence_duration_ms=200,
             speech_pad_ms=100,
             batch_size=4,
         )
@@ -145,6 +156,15 @@ def handle_transcribe_raw(payload: dict) -> dict:
     samples = _read_raw_f32(raw_path, sample_count)
     duration_s = len(samples) / 16000.0
     log(f"transcribe {duration_s:.1f}s, language_hint={language!r}")
+
+    # Parakeet v3 hallucinates a random language on very short / noisy
+    # segments (the "stay quiet" training data bias flips to garbage when
+    # the input is too short to decide). Drop anything shorter than 1s
+    # outright — there's no meaningful French content in a sub-second
+    # chunk and the output is almost certainly a hallucination.
+    if duration_s < 1.0:
+        log(f"skipping short chunk ({duration_s:.2f}s)")
+        return {"status": "ok", "segments": []}
 
     # recognize() accepts a numpy array at a given sample_rate. With VAD
     # attached, it returns a list of result objects; without VAD, a single
