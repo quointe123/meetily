@@ -90,13 +90,32 @@ fn signature_chars(lang: &str) -> &'static [char] {
 /// Excludes English words that also appear in French (e.g. "a", "an",
 /// "on") to avoid false positives on legitimate French content.
 const ENGLISH_STOPWORDS: &[&str] = &[
+    // Articles / copulas
     "the", "and", "is", "are", "was", "were", "be", "been", "being",
+    // Demonstratives / interrogatives
     "this", "that", "these", "those", "what", "when", "where", "which",
-    "who", "why", "how", "yeah", "okay", "just", "have", "has", "had",
-    "will", "would", "could", "should", "there", "here", "with", "from",
-    "they", "them", "their", "its", "it's", "i'm", "don't", "didn't",
-    "can't", "won't", "you", "your", "my", "me", "we", "us", "our",
-    "going", "gonna", "wanna", "about", "because", "some", "all",
+    "who", "why", "how",
+    // Common fillers / affirmations
+    "yeah", "okay", "ok", "right", "well", "so",
+    // Aux + modals
+    "have", "has", "had", "will", "would", "could", "should",
+    "can", "must", "might", "may", "do", "does", "did",
+    // Prepositions / connectors
+    "there", "here", "with", "from", "into", "onto", "upon", "about",
+    "because", "after", "before", "while", "still", "even",
+    // Pronouns + contractions
+    "they", "them", "their", "its", "it's", "i'm", "i'll", "i've", "i'd",
+    "you're", "you've", "you'll", "you'd", "we're", "we've", "we'll",
+    "they're", "they've", "they'll", "don't", "doesn't", "didn't",
+    "can't", "won't", "wouldn't", "shouldn't", "couldn't", "isn't",
+    "aren't", "wasn't", "weren't", "hasn't", "haven't", "hadn't",
+    "what's", "that's", "there's", "here's", "let's", "who's",
+    "you", "your", "my", "me", "we", "us", "our",
+    // Gerunds / action
+    "going", "gonna", "wanna", "getting", "coming", "know", "think",
+    "some", "all", "any", "every", "much", "many",
+    // Standalone "I"
+    "i",
 ];
 
 /// Count how many whitespace-separated tokens in the transcript match an

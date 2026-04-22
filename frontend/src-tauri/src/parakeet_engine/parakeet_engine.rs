@@ -601,13 +601,41 @@ impl ParakeetEngine {
         if let Some(res) = sidecar_result {
             match res {
                 Ok(segments) => {
-                    let text = segments
-                        .into_iter()
-                        .map(|s| s.text)
-                        .collect::<Vec<_>>()
-                        .join(" ");
+                    // Filter per-sub-segment BEFORE concatenation. Parakeet v3
+                    // hallucinates a random language on ambiguous sub-chunks;
+                    // if we only filtered on the joined text, the bad snippet
+                    // gets diluted by the surrounding French content and the
+                    // stopword-density check misses it. Running the filter on
+                    // each sub-segment independently catches these cleanly.
+                    let mut kept = Vec::with_capacity(segments.len());
+                    let mut dropped = 0usize;
+                    for seg in segments {
+                        let text = seg.text.trim();
+                        if text.is_empty() {
+                            continue;
+                        }
+                        let check = crate::audio::language_filter::check_language(
+                            text,
+                            Some("fr"),
+                        );
+                        if matches!(
+                            check,
+                            crate::audio::language_filter::LanguageCheck::Mismatch
+                        ) {
+                            dropped += 1;
+                            log::info!(
+                                "Parakeet sub-segment dropped (language mismatch): '{}'",
+                                text.chars().take(80).collect::<String>()
+                            );
+                            continue;
+                        }
+                        kept.push(text.to_string());
+                    }
+                    let text = kept.join(" ");
                     log::debug!(
-                        "Parakeet sidecar transcription: '{}'",
+                        "Parakeet sidecar transcription: kept {} sub-segments, dropped {}: '{}'",
+                        kept.len(),
+                        dropped,
                         text.chars().take(80).collect::<String>()
                     );
                     return Ok(text);
