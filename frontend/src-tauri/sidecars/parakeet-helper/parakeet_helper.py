@@ -51,6 +51,28 @@ def send(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _ensure_config_json(model_dir: Path, model_id: str) -> None:
+    """Write config.json if it's missing.
+
+    onnx-asr reads `features_size` from config.json to know the mel-bin
+    dimension. Without it, it defaults to 80 — which is wrong for Parakeet
+    v3 (128 mels). Meetily's downloader didn't fetch config.json in older
+    builds, so we backfill it here.
+    """
+    config_path = model_dir / "config.json"
+    if config_path.is_file():
+        return
+
+    # Match istupakov/parakeet-tdt-0.6b-v*-onnx config.json layout.
+    if "v3" in model_id:
+        cfg = {"model_type": "nemo-conformer-tdt", "features_size": 128, "subsampling_factor": 8}
+    else:
+        cfg = {"model_type": "nemo-conformer-tdt", "features_size": 80, "subsampling_factor": 8}
+
+    config_path.write_text(json.dumps(cfg))
+    log(f"wrote missing config.json ({cfg})")
+
+
 def handle_load_model(payload: dict) -> dict:
     global _model, _model_id
 
@@ -62,6 +84,8 @@ def handle_load_model(payload: dict) -> dict:
 
     if not model_dir.is_dir():
         return {"status": "error", "message": f"model_dir not found: {model_dir}"}
+
+    _ensure_config_json(model_dir, model_id)
 
     log(f"loading model_id={model_id} from {model_dir} (quant={quantization})")
 
